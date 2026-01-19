@@ -19,13 +19,13 @@ import {
 import Animated, {
     useSharedValue
 } from 'react-native-reanimated';
-import { Movie } from '../api/tmdb';
 import {
     CARD_DIMENSIONS,
     COLORS,
     FONT_SIZES,
     SPACING
 } from '../constants/theme';
+import { Movie } from '../types/database.types';
 import { getBackdropUrl } from '../utils/image';
 import { HeroBannerSkeleton } from './Loader';
 
@@ -40,7 +40,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const HeroItem = memo(({ movie }: { movie: Movie }) => {
     const playScale = useSharedValue(1);
-    const backdropUrl = getBackdropUrl(movie.backdrop_path, 'large');
+    const backdropUrl = getBackdropUrl(movie.backdrop_url, 'large');
 
     const handlePress = useCallback(() => {
         router.push(`/movie/${movie.id}`);
@@ -75,13 +75,13 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
                 </Animated.Text>
 
                 <View style={styles.metaContainer}>
-                    <Text style={styles.rating}>★ {movie.vote_average.toFixed(1)}</Text>
+                    <Text style={styles.rating}>★ {(movie.rating || 0).toFixed(1)}</Text>
                     <Text style={styles.separator}>•</Text>
-                    <Text style={styles.year}>{new Date(movie.release_date).getFullYear()}</Text>
+                    <Text style={styles.year}>{movie.release_year}</Text>
                 </View>
 
                 <Text style={styles.overview} numberOfLines={2}>
-                    {movie.overview}
+                    {movie.description}
                 </Text>
 
                 <View style={styles.buttonContainer}>

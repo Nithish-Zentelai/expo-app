@@ -1,7 +1,9 @@
 /**
  * Home screen with sliding hero banner and functional category filters
+ * Now using Supabase for dynamic data fetching
  */
 
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -18,7 +20,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { HeroBanner, HomeScreenSkeleton, MovieRow, NumberedMovieRow } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
-import { useHomeData } from '../../src/hooks/useMovies';
+import { useSupabaseHomeData } from '../../src/hooks/useSupabaseMovies';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -63,7 +65,7 @@ const Header = ({ activeCategory, onCategoryChange }: { activeCategory: Category
 const Footer = () => (
     <View style={styles.footer}>
         <Text style={styles.footerText}>
-            This product uses high-quality static assets for demonstration.
+            Powered by Supabase • Dynamic content from your database
         </Text>
         <Text style={styles.footerCopyright}>© 2025 Matrix • All Rights Reserved</Text>
     </View>
@@ -72,7 +74,8 @@ const Footer = () => (
 // ============ Home Screen Component ============
 
 export default function HomeScreen() {
-    const { data, loading, error, refetch } = useHomeData();
+    // Use Supabase hook for data fetching
+    const { data, loading, error, refetch } = useSupabaseHomeData();
     const [refreshing, setRefreshing] = useState(false);
     const [activeCategory, setActiveCategory] = useState<Category>('Home');
 
@@ -86,11 +89,11 @@ export default function HomeScreen() {
         if (loading) return null;
 
         if (activeCategory === 'TV Shows') {
+            // For now, show new releases as "TV Shows" content
             return (
                 <Animated.View entering={FadeInDown}>
-                    <MovieRow title="New Releases" movies={data.tvShows} loading={loading} />
-                    <MovieRow title="Bingeworthy Stories" movies={data.tvShows.slice().reverse()} loading={loading} variant="backdrop" />
-                    <MovieRow title="Top Sci-Fi" movies={data.tvShows.filter(m => m.genre_ids.includes(878))} loading={loading} />
+                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} />
+                    <MovieRow title="Bingeworthy Stories" movies={[...data.newReleases].reverse()} loading={loading} variant="backdrop" />
                 </Animated.View>
             );
         }
@@ -100,26 +103,22 @@ export default function HomeScreen() {
                 <Animated.View entering={FadeInDown}>
                     <MovieRow title="Blockbusters" movies={data.popular} loading={loading} />
                     <MovieRow title="Critically Acclaimed" movies={data.topRated} loading={loading} variant="backdrop" />
-                    <MovieRow title="Upcoming" movies={data.upcoming} loading={loading} />
-                    <MovieRow title="Thriller & Mystery" movies={data.popular.slice().reverse()} loading={loading} />
+                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} />
                 </Animated.View>
             );
         }
 
         if (activeCategory === 'My List') {
+            // My List functionality would require user auth
             return (
                 <Animated.View entering={FadeInDown}>
-                    {data.myList.length > 0 ? (
-                        <MovieRow title="Your Watchlist" movies={data.myList} loading={loading} />
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="add-circle-outline" size={60} color={COLORS.textMuted} />
-                            <Text style={styles.emptyText}>Your list is empty.</Text>
-                            <TouchableOpacity style={styles.browseButton} onPress={() => setActiveCategory('Home')}>
-                                <Text style={styles.browseButtonText}>Browse Projects</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="add-circle-outline" size={60} color={COLORS.textMuted} />
+                        <Text style={styles.emptyText}>Your list is empty.</Text>
+                        <TouchableOpacity style={styles.browseButton} onPress={() => setActiveCategory('Home')}>
+                            <Text style={styles.browseButtonText}>Browse Movies</Text>
+                        </TouchableOpacity>
+                    </View>
                 </Animated.View>
             );
         }
@@ -136,11 +135,11 @@ export default function HomeScreen() {
                 </Animated.View>
 
                 <Animated.View entering={FadeInDown.delay(400)}>
-                    <MovieRow title="Trending Now" movies={data.nowPlaying} loading={loading} variant="backdrop" />
+                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} variant="backdrop" />
                 </Animated.View>
 
                 <Animated.View entering={FadeInDown.delay(500)}>
-                    <MovieRow title="Critically Acclaimed" movies={data.topRated} loading={loading} />
+                    <MovieRow title="Top Rated" movies={data.topRated} loading={loading} />
                 </Animated.View>
             </>
         );
@@ -148,6 +147,22 @@ export default function HomeScreen() {
 
     if (loading && !refreshing) {
         return <View style={styles.container}><HomeScreenSkeleton /></View>;
+    }
+
+    // Show error state if there's an error and no data
+    if (error && data.trending.length === 0) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.errorContainer}>
+                    <Ionicons name="cloud-offline-outline" size={64} color={COLORS.textMuted} />
+                    <Text style={styles.errorText}>Unable to load content</Text>
+                    <Text style={styles.errorSubtext}>{error}</Text>
+                    <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+                        <Text style={styles.retryButtonText}>Try Again</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
     }
 
     return (
@@ -192,8 +207,6 @@ export default function HomeScreen() {
         </View>
     );
 }
-
-import { Ionicons } from '@expo/vector-icons';
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
@@ -259,5 +272,32 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 4,
     },
-    browseButtonText: { color: COLORS.background, fontWeight: '700' }
+    browseButtonText: { color: COLORS.background, fontWeight: '700' },
+    // Error state styles
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.xxl,
+    },
+    errorText: {
+        color: COLORS.text,
+        fontSize: FONT_SIZES.lg,
+        fontWeight: '700',
+        marginTop: SPACING.lg,
+    },
+    errorSubtext: {
+        color: COLORS.textMuted,
+        fontSize: FONT_SIZES.sm,
+        marginTop: SPACING.sm,
+        textAlign: 'center',
+    },
+    retryButton: {
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 25,
+        paddingVertical: 12,
+        borderRadius: 4,
+        marginTop: SPACING.xl,
+    },
+    retryButtonText: { color: COLORS.text, fontWeight: '700' },
 });
