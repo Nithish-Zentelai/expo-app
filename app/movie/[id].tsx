@@ -1,23 +1,16 @@
-/**
- * Movie Details Screen
- * Full movie information with trailer, cast, and similar movies
- */
-
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import {
     Dimensions,
-    Linking,
     Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
-    View,
+    View
 } from 'react-native';
 import Animated, {
     FadeInDown,
@@ -27,7 +20,6 @@ import Animated, {
     withSpring
 } from 'react-native-reanimated';
 
-import { Cast, Crew, Genre } from '../../src/api/tmdb';
 import { FullScreenLoader, MovieRow } from '../../src/components';
 import {
     BORDER_RADIUS,
@@ -36,8 +28,8 @@ import {
     FONT_WEIGHTS,
     SPACING,
 } from '../../src/constants/theme';
-import { useMovieDetails } from '../../src/hooks/useMovies';
-import { getBackdropUrl, getPosterUrl, getYouTubeUrl } from '../../src/utils/image';
+import { useSupabaseMovieDetails } from '../../src/hooks/useSupabaseMovies';
+import { Category } from '../../src/types/database.types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 400;
@@ -77,45 +69,30 @@ const BackButton = () => {
 
 // ============ Genre Chip Component ============
 
-const GenreChip = ({ genre }: { genre: Genre }) => (
+const GenreChip = ({ category }: { category: Category }) => (
     <View style={styles.genreChip}>
-        <Text style={styles.genreText}>{genre.name}</Text>
+        <Text style={styles.genreText}>{category.name}</Text>
     </View>
 );
 
-// ============ Cast Card Component ============
+// ============ Cast Card Placeholder ============
 
-const CastCard = React.memo(({ cast, index }: { cast: Cast; index: number }) => {
-    const profileUrl = getPosterUrl(cast.profile_path, 'small');
-
-    return (
-        <Animated.View
-            style={styles.castCard}
-            entering={FadeInUp.delay(index * 50).springify()}
-        >
-            {profileUrl ? (
-                <Image
-                    source={{ uri: profileUrl }}
-                    style={styles.castImage}
-                    contentFit="cover"
-                    transition={300}
-                />
-            ) : (
-                <View style={[styles.castImage, styles.castPlaceholder]}>
-                    <Ionicons name="person" size={24} color={COLORS.textMuted} />
-                </View>
-            )}
-            <Text style={styles.castName} numberOfLines={1}>
-                {cast.name}
-            </Text>
-            <Text style={styles.castCharacter} numberOfLines={1}>
-                {cast.character}
-            </Text>
-        </Animated.View>
-    );
-});
-
-CastCard.displayName = 'CastCard';
+const CastCardPlaceholder = ({ index }: { index: number }) => (
+    <Animated.View
+        style={styles.castCard}
+        entering={FadeInUp.delay(index * 50).springify()}
+    >
+        <View style={[styles.castImage, styles.castPlaceholder]}>
+            <Ionicons name="person" size={24} color={COLORS.textMuted} />
+        </View>
+        <Text style={styles.castName} numberOfLines={1}>
+            Cast Member
+        </Text>
+        <Text style={styles.castCharacter} numberOfLines={1}>
+            Role
+        </Text>
+    </Animated.View>
+);
 
 // ============ Info Row Component ============
 
@@ -140,21 +117,25 @@ interface ActionButtonProps {
     label: string;
     onPress: () => void;
     primary?: boolean;
+    disabled?: boolean;
 }
 
-const ActionButton = ({ icon, label, onPress, primary = false }: ActionButtonProps) => {
+const ActionButton = ({ icon, label, onPress, primary = false, disabled = false }: ActionButtonProps) => {
     const scale = useSharedValue(1);
 
     const handlePressIn = useCallback(() => {
+        if (disabled) return;
         scale.value = withSpring(0.95);
-    }, [scale]);
+    }, [scale, disabled]);
 
     const handlePressOut = useCallback(() => {
+        if (disabled) return;
         scale.value = withSpring(1);
-    }, [scale]);
+    }, [scale, disabled]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
+        opacity: disabled ? 0.5 : 1,
     }));
 
     return (
@@ -166,7 +147,8 @@ const ActionButton = ({ icon, label, onPress, primary = false }: ActionButtonPro
             ]}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
-            onPress={onPress}
+            onPress={disabled ? undefined : onPress}
+            disabled={disabled}
         >
             <Ionicons
                 name={icon}
@@ -204,20 +186,17 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry: () => void
 // ============ Movie Details Screen ============
 
 export default function MovieDetailsScreen() {
-    // Get movie ID from route params
-    const { id } = useLocalSearchParams<{ id: string }>();
-    const movieId = id ? parseInt(id, 10) : null;
+    // Get movie ID from route params (UUID string)
+    const { id: movieId } = useLocalSearchParams<{ id: string }>();
 
-    // Fetch movie details
-    const { movie, videos, credits, similar, trailer, loading, error, refetch } =
-        useMovieDetails(movieId);
+    // Fetch movie details using Supabase hook
+    const { movie, similar, loading, error, refetch } = useSupabaseMovieDetails(movieId || null);
 
-    // Handle play trailer
+    // Handle play trailer (Not yet available in Supabase, using placeholder)
     const handlePlayTrailer = useCallback(() => {
-        if (trailer) {
-            Linking.openURL(getYouTubeUrl(trailer.key));
-        }
-    }, [trailer]);
+        // TODO: Implement trailer linking when available
+        console.log('Play Trailer for:', movie?.title);
+    }, [movie]);
 
     // Handle add to My List
     const handleAddToList = useCallback(() => {
@@ -225,23 +204,13 @@ export default function MovieDetailsScreen() {
         console.log('Add to My List:', movie?.title);
     }, [movie]);
 
-    // Format runtime
+    // Format duration
     const formattedRuntime = useMemo(() => {
-        if (!movie?.runtime) return null;
-        const hours = Math.floor(movie.runtime / 60);
-        const minutes = movie.runtime % 60;
+        if (!movie?.duration) return null;
+        const hours = Math.floor(movie.duration / 60);
+        const minutes = movie.duration % 60;
         return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    }, [movie?.runtime]);
-
-    // Get director
-    const director = useMemo(() => {
-        return credits?.crew.find((c: Crew) => c.job === 'Director');
-    }, [credits]);
-
-    // Get top cast (first 10)
-    const topCast = useMemo(() => {
-        return credits?.cast.slice(0, 10) || [];
-    }, [credits]);
+    }, [movie?.duration]);
 
     // Show loading state
     if (loading) {
@@ -262,9 +231,6 @@ export default function MovieDetailsScreen() {
         );
     }
 
-    const backdropUrl = getBackdropUrl(movie.backdrop_path, 'large');
-    const posterUrl = getPosterUrl(movie.poster_path, 'medium');
-
     return (
         <View style={styles.container}>
             <ScrollView
@@ -274,9 +240,9 @@ export default function MovieDetailsScreen() {
             >
                 {/* Backdrop Image */}
                 <View style={styles.backdropContainer}>
-                    {backdropUrl && (
+                    {movie.backdrop_url && (
                         <Image
-                            source={{ uri: backdropUrl }}
+                            source={{ uri: movie.backdrop_url }}
                             style={styles.backdropImage}
                             contentFit="cover"
                             transition={500}
@@ -298,9 +264,9 @@ export default function MovieDetailsScreen() {
                 <View style={styles.infoSection}>
                     {/* Poster and Title Row */}
                     <Animated.View style={styles.titleRow} entering={FadeInUp.delay(100)}>
-                        {posterUrl && (
+                        {movie.poster_url && (
                             <Image
-                                source={{ uri: posterUrl }}
+                                source={{ uri: movie.poster_url }}
                                 style={styles.poster}
                                 contentFit="cover"
                                 transition={300}
@@ -313,12 +279,16 @@ export default function MovieDetailsScreen() {
                             <View style={styles.metaRow}>
                                 <View style={styles.ratingContainer}>
                                     <Ionicons name="star" size={16} color={COLORS.accentGold} />
-                                    <Text style={styles.rating}>{movie.vote_average.toFixed(1)}</Text>
+                                    <Text style={styles.rating}>{movie.rating.toFixed(1)}</Text>
                                 </View>
-                                <Text style={styles.metaSeparator}>•</Text>
-                                <Text style={styles.year}>
-                                    {new Date(movie.release_date).getFullYear()}
-                                </Text>
+                                {movie.release_year && (
+                                    <>
+                                        <Text style={styles.metaSeparator}>•</Text>
+                                        <Text style={styles.year}>
+                                            {movie.release_year}
+                                        </Text>
+                                    </>
+                                )}
                                 {formattedRuntime && (
                                     <>
                                         <Text style={styles.metaSeparator}>•</Text>
@@ -327,10 +297,10 @@ export default function MovieDetailsScreen() {
                                 )}
                             </View>
 
-                            {/* Genres */}
+                            {/* Genres / Categories */}
                             <View style={styles.genresContainer}>
-                                {movie.genres?.slice(0, 3).map((genre) => (
-                                    <GenreChip key={genre.id} genre={genre} />
+                                {movie.categories?.map((category) => (
+                                    <GenreChip key={category.id} category={category} />
                                 ))}
                             </View>
                         </View>
@@ -340,9 +310,10 @@ export default function MovieDetailsScreen() {
                     <Animated.View style={styles.actionsRow} entering={FadeInUp.delay(200)}>
                         <ActionButton
                             icon="play"
-                            label={trailer ? 'Play Trailer' : 'No Trailer'}
+                            label="No Trailer"
                             onPress={handlePlayTrailer}
                             primary
+                            disabled
                         />
                         <ActionButton
                             icon="add"
@@ -351,63 +322,25 @@ export default function MovieDetailsScreen() {
                         />
                     </Animated.View>
 
-                    {/* Tagline */}
-                    {movie.tagline && (
-                        <Animated.Text
-                            style={styles.tagline}
-                            entering={FadeInDown.delay(250)}
-                        >
-                            "{movie.tagline}"
-                        </Animated.Text>
-                    )}
-
                     {/* Overview */}
                     <Animated.View entering={FadeInDown.delay(300)}>
                         <Text style={styles.sectionTitle}>Overview</Text>
-                        <Text style={styles.overview}>{movie.overview}</Text>
+                        <Text style={styles.overview}>{movie.description || 'No description available.'}</Text>
                     </Animated.View>
 
                     {/* Additional Info */}
                     <Animated.View style={styles.additionalInfo} entering={FadeInDown.delay(350)}>
-                        {director && (
-                            <InfoRow icon="film-outline" label="Director" value={director.name} />
-                        )}
-                        {movie.status && (
-                            <InfoRow icon="information-circle-outline" label="Status" value={movie.status} />
-                        )}
-                        {movie.budget > 0 && (
-                            <InfoRow
-                                icon="cash-outline"
-                                label="Budget"
-                                value={`$${(movie.budget / 1000000).toFixed(1)}M`}
-                            />
-                        )}
-                        {movie.revenue > 0 && (
-                            <InfoRow
-                                icon="trending-up-outline"
-                                label="Revenue"
-                                value={`$${(movie.revenue / 1000000).toFixed(1)}M`}
-                            />
-                        )}
+                        <InfoRow icon="film-outline" label="Format" value="4K Ultra HD" />
+                        <InfoRow icon="information-circle-outline" label="Availability" value="Streaming Now" />
                     </Animated.View>
 
-                    {/* Cast Section */}
-                    {topCast.length > 0 && (
-                        <Animated.View entering={FadeInDown.delay(400)}>
-                            <Text style={styles.sectionTitle}>Cast</Text>
-                            <View style={styles.castContainer}>
-                                <FlashList
-                                    data={topCast}
-                                    renderItem={({ item, index }) => <CastCard cast={item} index={index} />}
-                                    keyExtractor={(item) => item.id.toString()}
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    estimatedItemSize={100}
-                                    contentContainerStyle={styles.castList}
-                                />
-                            </View>
-                        </Animated.View>
-                    )}
+                    {/* Cast Section (Placeholder for now) */}
+                    <Animated.View entering={FadeInDown.delay(400)}>
+                        <Text style={styles.sectionTitle}>Cast</Text>
+                        <View style={styles.castContainer}>
+                            <Text style={styles.footerText}>Cast information coming soon.</Text>
+                        </View>
+                    </Animated.View>
                 </View>
 
                 {/* Similar Movies */}
@@ -423,7 +356,7 @@ export default function MovieDetailsScreen() {
                 {/* Footer */}
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
-                        This product uses the TMDB API but is not endorsed or certified by TMDB.
+                        Exclusively on MatrixFlix
                     </Text>
                 </View>
 

@@ -20,9 +20,9 @@ import Animated, {
     withSpring,
     withTiming
 } from 'react-native-reanimated';
-import { Movie } from '../api/tmdb';
 import { BORDER_RADIUS, CARD_DIMENSIONS, COLORS, FONT_SIZES, SPACING } from '../constants/theme';
-import { getPosterUrl } from '../utils/image';
+import { Movie } from '../types/database.types';
+import { getBackdropUrl, getPosterUrl } from '../utils/image';
 
 // ============ Types ============
 
@@ -57,7 +57,7 @@ export const MovieCard = memo(({
     const opacity = useSharedValue(1);
 
     // Get poster URL
-    const posterUrl = getPosterUrl(movie.poster_path, 'medium');
+    const posterUrl = getPosterUrl(movie.poster_url, 'medium');
 
     // Handle press animations
     const handlePressIn = useCallback(() => {
@@ -82,10 +82,10 @@ export const MovieCard = memo(({
     }));
 
     // Format rating
-    const rating = movie.vote_average.toFixed(1);
-    const ratingColor = movie.vote_average >= 7
+    const rating = (movie.rating || 0).toFixed(1);
+    const ratingColor = movie.rating >= 7
         ? COLORS.success
-        : movie.vote_average >= 5
+        : movie.rating >= 5
             ? COLORS.warning
             : COLORS.error;
 
@@ -114,7 +114,7 @@ export const MovieCard = memo(({
                 )}
 
                 {/* Rating Badge */}
-                {showRating && movie.vote_average > 0 && (
+                {showRating && movie.rating > 0 && (
                     <View style={[styles.ratingBadge, { backgroundColor: ratingColor }]}>
                         <Text style={styles.ratingText}>{rating}</Text>
                     </View>
@@ -153,7 +153,7 @@ interface LargeMovieCardProps {
 export const LargeMovieCard = memo(({ movie, onPress }: LargeMovieCardProps) => {
     const scale = useSharedValue(1);
 
-    const posterUrl = getPosterUrl(movie.backdrop_path || movie.poster_path, 'large');
+    const posterUrl = getBackdropUrl(movie.backdrop_url || movie.poster_url, 'large');
 
     const handlePressIn = useCallback(() => {
         scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
@@ -209,12 +209,12 @@ export const LargeMovieCard = memo(({ movie, onPress }: LargeMovieCardProps) => 
                     </Text>
                     <View style={styles.metaRow}>
                         <Text style={styles.releaseDate}>
-                            {new Date(movie.release_date).getFullYear()}
+                            {movie.release_year}
                         </Text>
                         <View style={styles.ratingRow}>
                             <Text style={styles.star}>★</Text>
                             <Text style={styles.largeRating}>
-                                {movie.vote_average.toFixed(1)}
+                                {movie.rating.toFixed(1)}
                             </Text>
                         </View>
                     </View>
