@@ -1,6 +1,7 @@
 /**
  * Search Screen
  * Animated search interface with debounced results and related suggestions
+ * Now using Supabase for dynamic data fetching
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MovieCard, MovieCardSkeleton } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
-import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
+import { useSupabaseHomeData, useSupabaseSearchMovies } from '../../src/hooks/useSupabaseMovies';
+import { Movie } from '../../src/types/database.types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -32,10 +34,9 @@ export default function SearchScreen() {
         loading,
         query = '',
         search,
-        loadMore
-    } = useSearchMovies();
+    } = useSupabaseSearchMovies();
 
-    const { data: homeData } = useHomeData();
+    const { data: homeData } = useSupabaseHomeData();
     const inputRef = useRef<TextInput>(null);
 
     const handleSearch = (text: string) => {
@@ -60,12 +61,12 @@ export default function SearchScreen() {
 
     // Calculate related movies (Trending but not in current results)
     const relatedMovies = useMemo(() => {
-        if (!homeData || !homeData.trending) return [];
+        if (!homeData.trending || homeData.trending.length === 0) return [];
         const resultIds = results?.map(r => r.id) || [];
         return homeData.trending.filter(m => !resultIds.includes(m.id)).slice(0, 6);
-    }, [homeData, results]);
+    }, [homeData.trending, results]);
 
-    const renderItem = useCallback(({ item, index }: { item: any, index: number }) => (
+    const renderItem = useCallback(({ item, index }: { item: Movie, index: number }) => (
         <Animated.View
             key={item.id}
             style={styles.cardWrapper}
@@ -110,7 +111,7 @@ export default function SearchScreen() {
                     <TextInput
                         ref={inputRef}
                         style={styles.input}
-                        placeholder="Search movies, TV shows..."
+                        placeholder="Search movies..."
                         placeholderTextColor={COLORS.textMuted}
                         value={query}
                         onChangeText={handleSearch}
@@ -133,7 +134,7 @@ export default function SearchScreen() {
                 <View style={styles.suggestionsContainer}>
                     <Text style={styles.sectionTitle}>Recommended Searches</Text>
                     <View style={styles.suggestionsGrid}>
-                        {['Cyber', 'Tokyo', 'Dragon', 'Silent', 'Chef', 'Signal'].map((tag) => (
+                        {['Cyber', 'Tokyo', 'Dragon', 'Silent', 'Ocean', 'Velocity'].map((tag) => (
                             <TouchableOpacity
                                 key={tag}
                                 style={styles.suggestionTag}
@@ -175,7 +176,6 @@ export default function SearchScreen() {
                 numColumns={3}
                 contentContainerStyle={styles.resultsList}
                 showsVerticalScrollIndicator={false}
-                onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 keyboardShouldPersistTaps="handled"
                 ListHeaderComponent={
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     },
     resultsList: {
         paddingHorizontal: 10,
-        paddingBottom: 150, // More space for floating bar
+        paddingBottom: 150,
     },
     cardWrapper: {
         padding: 4,
