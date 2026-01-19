@@ -9,8 +9,8 @@ import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     FadeInRight
 } from 'react-native-reanimated';
-import { Movie } from '../api/tmdb';
 import { COLORS, FONT_SIZES, SPACING } from '../constants/theme';
+import { Movie } from '../types/database.types';
 import { MovieCardSkeleton } from './Loader';
 import { LargeMovieCard, MovieCard } from './MovieCard';
 
