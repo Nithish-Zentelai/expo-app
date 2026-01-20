@@ -29,11 +29,20 @@ CREATE TABLE IF NOT EXISTS movies (
     release_year INTEGER,
     rating DECIMAL(3, 1) DEFAULT 0,
     duration INTEGER, -- in minutes
+    trailer_youtube_id TEXT, -- YouTube video ID for trailer
     is_trending BOOLEAN DEFAULT false,
     is_popular BOOLEAN DEFAULT false,
     is_new_release BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Safe migration: Add the column if it doesn't exist (for existing tables)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'movies' AND column_name = 'trailer_youtube_id') THEN
+        ALTER TABLE movies ADD COLUMN trailer_youtube_id TEXT;
+    END IF;
+END $$;
 
 -- ============================================
 -- Movie Categories Junction Table (Many-to-Many)
