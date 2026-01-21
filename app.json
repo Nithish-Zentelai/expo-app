@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Matrix",
-    "slug": "matrixflix",
+    "name": " ",
+    "slug": "Matrix",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,10 +10,10 @@
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.matrix.matrix"
+      "bundleIdentifier": "com.matrix"
     },
     "android": {
-      "package": "com.matrix.matrix",
+      "package": "com.matrix",
       "adaptiveIcon": {
         "backgroundColor": "#141414",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -21,19 +21,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#141414"
-        }
-      ],
-      "expo-font"
-    ],
+
     "extra": {
       "router": {},
       "eas": {
