@@ -30,8 +30,9 @@ import {
     FONT_WEIGHTS,
     SPACING,
 } from '../../src/constants/theme';
-import { useSupabaseMovieDetails } from '../../src/hooks/useSupabaseMovies';
-import { Category } from '../../src/types/database.types';
+import { useMovieDetails } from '../../src/hooks/useMovies';
+import { Genre } from '../../src/api/tmdb';
+import { getBackdropUrl, getPosterUrl } from '../../src/utils/image';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 400;
@@ -71,7 +72,7 @@ const BackButton = () => {
 
 // ============ Genre Chip Component ============
 
-const GenreChip = ({ category }: { category: Category }) => (
+const GenreChip = ({ category }: { category: Genre }) => (
     <View style={styles.genreChip}>
         <Text style={styles.genreText}>{category.name}</Text>
     </View>
@@ -188,21 +189,25 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry: () => void
 // ============ Movie Details Screen ============
 
 export default function MovieDetailsScreen() {
-    // Get movie ID from route params (UUID string)
+    // Get movie ID from route params (TMDB numeric string)
     const { id: movieId } = useLocalSearchParams<{ id: string }>();
+    const movieIdNumber = movieId ? Number(movieId) : null;
 
-    // Fetch movie details using Supabase hook
-    const { movie, similar, loading, error, refetch } = useSupabaseMovieDetails(movieId || null);
+    // Fetch movie details from TMDB
+    const { movie, similar, loading, error, refetch, trailer } = useMovieDetails(
+        Number.isFinite(movieIdNumber) ? movieIdNumber : null
+    );
 
     // Trailer modal state
     const [showTrailer, setShowTrailer] = useState(false);
+    const trailerKey = trailer?.site === 'YouTube' ? trailer.key : undefined;
 
     // Handle play trailer
     const handlePlayTrailer = useCallback(() => {
-        if (movie?.trailer_youtube_id) {
+        if (trailerKey) {
             setShowTrailer(true);
         }
-    }, [movie]);
+    }, [trailerKey]);
 
     // Handle add to My List
     const handleAddToList = useCallback(() => {
@@ -212,11 +217,15 @@ export default function MovieDetailsScreen() {
 
     // Format duration
     const formattedRuntime = useMemo(() => {
-        if (!movie?.duration) return null;
-        const hours = Math.floor(movie.duration / 60);
-        const minutes = movie.duration % 60;
+        if (!movie?.runtime) return null;
+        const hours = Math.floor(movie.runtime / 60);
+        const minutes = movie.runtime % 60;
         return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    }, [movie?.duration]);
+    }, [movie?.runtime]);
+
+    const backdropUrl = getBackdropUrl(movie?.backdrop_path ?? movie?.poster_path, 'original');
+    const posterUrl = getPosterUrl(movie?.poster_path, 'large');
+    const releaseYear = movie?.release_date ? movie.release_date.split('-')[0] : '—';
 
     // Show loading state
     if (loading) {
@@ -246,9 +255,9 @@ export default function MovieDetailsScreen() {
             >
                 {/* Backdrop Image */}
                 <View style={styles.backdropContainer}>
-                    {movie.backdrop_url && (
+                    {backdropUrl && (
                         <Image
-                            source={{ uri: movie.backdrop_url }}
+                            source={{ uri: backdropUrl }}
                             style={styles.backdropImage}
                             contentFit="cover"
                             transition={500}
@@ -270,9 +279,9 @@ export default function MovieDetailsScreen() {
                 <View style={styles.infoSection}>
                     {/* Poster and Title Row */}
                     <Animated.View style={styles.titleRow} entering={FadeInUp.delay(100)}>
-                        {movie.poster_url && (
+                        {posterUrl && (
                             <Image
-                                source={{ uri: movie.poster_url }}
+                                source={{ uri: posterUrl }}
                                 style={styles.poster}
                                 contentFit="cover"
                                 transition={300}
@@ -285,16 +294,10 @@ export default function MovieDetailsScreen() {
                             <View style={styles.metaRow}>
                                 <View style={styles.ratingContainer}>
                                     <Ionicons name="star" size={16} color={COLORS.accentGold} />
-                                    <Text style={styles.rating}>{movie.rating.toFixed(1)}</Text>
+                                    <Text style={styles.rating}>{(movie.vote_average || 0).toFixed(1)}</Text>
                                 </View>
-                                {movie.release_year && (
-                                    <>
-                                        <Text style={styles.metaSeparator}>•</Text>
-                                        <Text style={styles.year}>
-                                            {movie.release_year}
-                                        </Text>
-                                    </>
-                                )}
+                                <Text style={styles.metaSeparator}>•</Text>
+                                <Text style={styles.year}>{releaseYear}</Text>
                                 {formattedRuntime && (
                                     <>
                                         <Text style={styles.metaSeparator}>•</Text>
@@ -305,7 +308,7 @@ export default function MovieDetailsScreen() {
 
                             {/* Genres / Categories */}
                             <View style={styles.genresContainer}>
-                                {movie.categories?.map((category) => (
+                                {movie.genres?.map((category) => (
                                     <GenreChip key={category.id} category={category} />
                                 ))}
                             </View>
@@ -316,10 +319,10 @@ export default function MovieDetailsScreen() {
                     <Animated.View style={styles.actionsRow} entering={FadeInUp.delay(200)}>
                         <ActionButton
                             icon="play"
-                            label={movie.trailer_youtube_id ? 'Play Trailer' : 'No Trailer'}
+                            label={trailerKey ? 'Play Trailer' : 'No Trailer'}
                             onPress={handlePlayTrailer}
                             primary
-                            disabled={!movie.trailer_youtube_id}
+                            disabled={!trailerKey}
                         />
                         <ActionButton
                             icon="add"
@@ -331,11 +334,12 @@ export default function MovieDetailsScreen() {
                     {/* Overview */}
                     <Animated.View entering={FadeInDown.delay(300)}>
                         <Text style={styles.sectionTitle}>Overview</Text>
-                        <Text style={styles.overview}>{movie.description || 'No description available.'}</Text>
+                        <Text style={styles.overview}>{movie.overview || 'No overview available.'}</Text>
                     </Animated.View>
 
                     {/* Additional Info */}
                     <Animated.View style={styles.additionalInfo} entering={FadeInDown.delay(350)}>
+                        <InfoRow icon="calendar-outline" label="Release Date" value={movie.release_date || '—'} />
                         <InfoRow icon="film-outline" label="Format" value="4K Ultra HD" />
                         <InfoRow icon="information-circle-outline" label="Availability" value="Streaming Now" />
                     </Animated.View>
@@ -393,7 +397,7 @@ export default function MovieDetailsScreen() {
                             <YoutubePlayer
                                 height={240}
                                 play={true}
-                                videoId={movie.trailer_youtube_id || undefined}
+                                videoId={trailerKey}
                                 onChangeState={(state: string) => {
                                     if (state === 'ended') {
                                         setShowTrailer(false);
