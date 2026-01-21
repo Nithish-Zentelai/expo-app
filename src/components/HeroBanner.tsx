@@ -11,21 +11,19 @@ import React, { memo, useCallback, useRef, useState } from 'react';
 import {
     Dimensions,
     FlatList,
-    Pressable,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from 'react-native';
-import Animated, {
-    useSharedValue
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import {
     CARD_DIMENSIONS,
     COLORS,
     FONT_SIZES,
     SPACING
 } from '../constants/theme';
-import { Movie } from '../types/database.types';
+import { Movie } from '../api/tmdb';
 import { getBackdropUrl } from '../utils/image';
 import { HeroBannerSkeleton } from './Loader';
 
@@ -36,11 +34,12 @@ interface HeroBannerProps {
     loading?: boolean;
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 const HeroItem = memo(({ movie }: { movie: Movie }) => {
-    const playScale = useSharedValue(1);
-    const backdropUrl = getBackdropUrl(movie.backdrop_url, 'large');
+    const backdropUrl = getBackdropUrl(movie.backdrop_path ?? movie.poster_path, 'original');
+    const title = movie.title || movie.name || 'Untitled';
+    const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : '—';
+    const ratingValue = movie.vote_average || 0;
+    const overview = movie.overview || 'No overview available.';
 
     const handlePress = useCallback(() => {
         router.push(`/movie/${movie.id}`);
@@ -71,17 +70,17 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
 
             <View style={styles.contentContainer}>
                 <Animated.Text style={styles.title} numberOfLines={2}>
-                    {movie.title}
+                    {title}
                 </Animated.Text>
 
                 <View style={styles.metaContainer}>
-                    <Text style={styles.rating}>★ {(movie.rating || 0).toFixed(1)}</Text>
+                    <Text style={styles.rating}>★ {ratingValue.toFixed(1)}</Text>
                     <Text style={styles.separator}>•</Text>
-                    <Text style={styles.year}>{movie.release_year}</Text>
+                    <Text style={styles.year}>{releaseYear}</Text>
                 </View>
 
                 <Text style={styles.overview} numberOfLines={2}>
-                    {movie.description}
+                    {overview}
                 </Text>
 
                 <View style={styles.buttonContainer}>
@@ -107,8 +106,6 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
         </View>
     );
 });
-
-import { TouchableOpacity } from 'react-native';
 
 export const HeroBanner = memo(({ movies, loading = false }: HeroBannerProps) => {
     const [activeIndex, setActiveIndex] = useState(0);

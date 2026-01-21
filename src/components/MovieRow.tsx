@@ -3,18 +3,15 @@
  * Horizontal scrollable row of movie cards - Netflix style
  */
 
-import { FlashList } from '@shopify/flash-list';
 import React, { memo, useCallback } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     FadeInRight
 } from 'react-native-reanimated';
 import { COLORS, FONT_SIZES, SPACING } from '../constants/theme';
-import { Movie } from '../types/database.types';
+import { Movie } from '../api/tmdb';
 import { MovieCardSkeleton } from './Loader';
 import { LargeMovieCard, MovieCard } from './MovieCard';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ============ Types ============
 
@@ -47,7 +44,7 @@ export const MovieRow = memo(({
 
         return (
             <Animated.View entering={FadeInRight.delay(index * 50).springify()}>
-                <MovieCard movie={item} index={index} />
+                <MovieCard movie={item} index={index} showTitle />
             </Animated.View>
         );
     }, [variant]);
@@ -75,14 +72,13 @@ export const MovieRow = memo(({
                 </View>
             ) : (
                 <View style={variant === 'backdrop' ? styles.backdropListContainer : styles.listContainer}>
-                    <FlashList
+                    <FlatList
                         data={movies}
                         renderItem={renderMovieCard}
                         keyExtractor={keyExtractor}
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.listContent}
-                        estimatedItemSize={variant === 'backdrop' ? 300 : 130}
                         snapToAlignment="start"
                         decelerationRate="fast"
                     />
@@ -119,6 +115,7 @@ export const NumberedMovieRow = memo(({
                         width={110}
                         height={160}
                         showRating={false}
+                        showTitle
                     />
                 </View>
             </Animated.View>
@@ -143,14 +140,13 @@ export const NumberedMovieRow = memo(({
                 </View>
             ) : (
                 <View style={styles.numberedListContainer}>
-                    <FlashList
+                    <FlatList
                         data={movies.slice(0, 10)}
                         renderItem={renderNumberedCard}
                         keyExtractor={keyExtractor}
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.listContent}
-                        estimatedItemSize={160}
                     />
                 </View>
             )}
