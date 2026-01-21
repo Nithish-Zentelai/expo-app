@@ -20,8 +20,8 @@ import Animated, {
     withSpring,
     withTiming
 } from 'react-native-reanimated';
+import { Movie } from '../api/tmdb';
 import { BORDER_RADIUS, CARD_DIMENSIONS, COLORS, FONT_SIZES, SPACING } from '../constants/theme';
-import { Movie } from '../types/database.types';
 import { getBackdropUrl, getPosterUrl } from '../utils/image';
 
 // ============ Types ============
@@ -57,7 +57,9 @@ export const MovieCard = memo(({
     const opacity = useSharedValue(1);
 
     // Get poster URL
-    const posterUrl = getPosterUrl(movie.poster_url, 'medium');
+    const posterUrl = getPosterUrl(movie.poster_path ?? movie.backdrop_path, 'medium');
+    const title = movie.title || movie.name || 'Untitled';
+    const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : '—';
 
     // Handle press animations
     const handlePressIn = useCallback(() => {
@@ -82,10 +84,11 @@ export const MovieCard = memo(({
     }));
 
     // Format rating
-    const rating = (movie.rating || 0).toFixed(1);
-    const ratingColor = movie.rating >= 7
+    const ratingValue = movie.vote_average || 0;
+    const rating = ratingValue.toFixed(1);
+    const ratingColor = ratingValue >= 7
         ? COLORS.success
-        : movie.rating >= 5
+        : ratingValue >= 5
             ? COLORS.warning
             : COLORS.error;
 
@@ -114,7 +117,7 @@ export const MovieCard = memo(({
                 )}
 
                 {/* Rating Badge */}
-                {showRating && movie.rating > 0 && (
+                {showRating && ratingValue > 0 && (
                     <View style={[styles.ratingBadge, { backgroundColor: ratingColor }]}>
                         <Text style={styles.ratingText}>{rating}</Text>
                     </View>
@@ -129,9 +132,12 @@ export const MovieCard = memo(({
 
             {/* Movie Title */}
             {showTitle && (
-                <Text style={styles.title} numberOfLines={2}>
-                    {movie.title}
-                </Text>
+                <View style={styles.titleContainer}>
+                    <Text style={styles.title} numberOfLines={2}>
+                        {title}
+                    </Text>
+                    <Text style={styles.subtitle}>{releaseYear}</Text>
+                </View>
             )}
         </AnimatedPressable>
     );
@@ -153,7 +159,11 @@ interface LargeMovieCardProps {
 export const LargeMovieCard = memo(({ movie, onPress }: LargeMovieCardProps) => {
     const scale = useSharedValue(1);
 
-    const posterUrl = getBackdropUrl(movie.backdrop_url || movie.poster_url, 'large');
+    const posterUrl = getBackdropUrl(movie.backdrop_path ?? movie.poster_path, 'large');
+    const title = movie.title || movie.name || 'Untitled';
+    const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : '—';
+    const ratingValue = movie.vote_average || 0;
+    const overview = movie.overview || 'No overview available.';
 
     const handlePressIn = useCallback(() => {
         scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
@@ -205,19 +215,22 @@ export const LargeMovieCard = memo(({ movie, onPress }: LargeMovieCardProps) => 
                 {/* Movie info at bottom */}
                 <View style={styles.largeCardInfo}>
                     <Text style={styles.largeTitle} numberOfLines={1}>
-                        {movie.title}
+                        {title}
                     </Text>
                     <View style={styles.metaRow}>
                         <Text style={styles.releaseDate}>
-                            {movie.release_year}
+                            {releaseYear}
                         </Text>
                         <View style={styles.ratingRow}>
                             <Text style={styles.star}>★</Text>
                             <Text style={styles.largeRating}>
-                                {movie.rating.toFixed(1)}
+                                {ratingValue.toFixed(1)}
                             </Text>
                         </View>
                     </View>
+                    <Text style={styles.largeOverview} numberOfLines={2}>
+                        {overview}
+                    </Text>
                 </View>
             </View>
         </AnimatedPressable>
@@ -273,10 +286,17 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     title: {
-        marginTop: SPACING.sm,
         color: COLORS.text,
         fontSize: FONT_SIZES.sm,
         fontWeight: '500',
+    },
+    titleContainer: {
+        marginTop: SPACING.sm,
+        gap: 2,
+    },
+    subtitle: {
+        color: COLORS.textMuted,
+        fontSize: FONT_SIZES.xs,
     },
     // Large card styles
     largeContainer: {
@@ -311,6 +331,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+    },
+    largeOverview: {
+        color: COLORS.textSecondary,
+        fontSize: FONT_SIZES.xs,
+        marginTop: SPACING.xs,
     },
     releaseDate: {
         color: COLORS.textSecondary,

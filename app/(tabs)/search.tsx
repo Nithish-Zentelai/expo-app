@@ -1,16 +1,18 @@
 /**
  * Search Screen
  * Animated search interface with debounced results and related suggestions
- * Now using Supabase for dynamic data fetching
+ * Uses TMDB search for real movie data
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Alert,
     Dimensions,
     FlatList,
     Keyboard,
+    PermissionsAndroid,
     Platform,
     StyleSheet,
     Text,
@@ -21,12 +23,13 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Movie } from '../../src/api/tmdb';
 import { MovieCard, MovieCardSkeleton } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
-import { useSupabaseHomeData, useSupabaseSearchMovies } from '../../src/hooks/useSupabaseMovies';
-import { Movie } from '../../src/types/database.types';
+import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const Voice = Platform.OS === 'web' ? null : require('@react-native-voice/voice').default;
 
 export default function SearchScreen() {
     const {
@@ -34,10 +37,77 @@ export default function SearchScreen() {
         loading,
         query = '',
         search,
-    } = useSupabaseSearchMovies();
+    } = useSearchMovies();
 
-    const { data: homeData } = useSupabaseHomeData();
+    const { data: homeData } = useHomeData();
     const inputRef = useRef<TextInput>(null);
+    const recognitionRef = useRef<any>(null);
+    const [isListening, setIsListening] = useState(false);
+    const [isVoiceSupported, setIsVoiceSupported] = useState(false);
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof window === 'undefined') return;
+            const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (!SpeechRecognitionImpl) return;
+
+            const recognition = new SpeechRecognitionImpl();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onresult = (event: any) => {
+                const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
+                if (transcript.trim()) {
+                    search(transcript);
+                    syncInputText(transcript);
+                }
+            };
+            recognition.onend = () => setIsListening(false);
+            recognition.onerror = () => setIsListening(false);
+
+            recognitionRef.current = recognition;
+            setIsVoiceSupported(true);
+
+            return () => {
+                recognition.stop?.();
+            };
+        }
+
+        if (!Voice) return;
+
+        Voice.onSpeechResults = (event: { value?: string[] }) => {
+            const transcript = event?.value?.[0] ?? '';
+            if (transcript.trim()) {
+                search(transcript);
+                syncInputText(transcript);
+            }
+        };
+        Voice.onSpeechEnd = () => setIsListening(false);
+        Voice.onSpeechError = () => setIsListening(false);
+
+        const checkAvailability = async () => {
+            try {
+                const available = await Voice.isAvailable();
+                setIsVoiceSupported(Boolean(available));
+            } catch {
+                setIsVoiceSupported(false);
+            }
+        };
+
+        checkAvailability();
+
+        return () => {
+            Voice.destroy().then(Voice.removeAllListeners);
+        };
+    }, [search]);
+
+    const syncInputText = (text: string) => {
+        const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
+        if (input && typeof input.setNativeProps === 'function') {
+            input.setNativeProps({ text });
+        }
+    };
 
     const handleSearch = (text: string) => {
         search(text);
@@ -45,18 +115,78 @@ export default function SearchScreen() {
 
     const handleClear = () => {
         search('');
-        inputRef.current?.clear();
+        if (typeof inputRef.current?.clear === 'function') {
+            inputRef.current.clear();
+        }
         Keyboard.dismiss();
     };
 
     const handleSuggestionClick = (title: string) => {
         search(title);
-        inputRef.current?.setNativeProps({ text: title });
+        syncInputText(title);
         Keyboard.dismiss();
     };
 
     const onSearchSubmit = () => {
         Keyboard.dismiss();
+    };
+
+    const requestAudioPermission = async () => {
+        if (Platform.OS !== 'android') return true;
+        const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+                title: 'Microphone permission',
+                message: 'We need access to your microphone for voice search.',
+                buttonPositive: 'OK',
+            }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+    };
+
+    const handleVoicePress = async () => {
+        if (!isVoiceSupported) {
+            if (Platform.OS === 'web') {
+                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
+            } else {
+                Alert.alert('Voice search unavailable', 'Speech recognition is not available on this device.');
+            }
+            return;
+        }
+
+        if (Platform.OS === 'web') {
+            if (isListening) {
+                recognitionRef.current?.stop?.();
+                setIsListening(false);
+                return;
+            }
+            try {
+                recognitionRef.current?.start?.();
+                setIsListening(true);
+            } catch {
+                setIsListening(false);
+            }
+            return;
+        }
+
+        try {
+            const hasPermission = await requestAudioPermission();
+            if (!hasPermission) {
+                Alert.alert('Microphone permission denied', 'Enable microphone access to use voice search.');
+                return;
+            }
+
+            if (isListening) {
+                await Voice.stop();
+                setIsListening(false);
+                return;
+            }
+
+            await Voice.start('en-US');
+            setIsListening(true);
+        } catch {
+            setIsListening(false);
+        }
     };
 
     // Calculate related movies (Trending but not in current results)
@@ -76,6 +206,7 @@ export default function SearchScreen() {
                 movie={item}
                 width={SCREEN_WIDTH / 3 - 15}
                 showRating={false}
+                showTitle
             />
         </Animated.View>
     ), []);
@@ -92,6 +223,7 @@ export default function SearchScreen() {
                                     movie={item}
                                     width={SCREEN_WIDTH / 3 - 15}
                                     showRating={false}
+                                    showTitle
                                 />
                             </View>
                         ))}
@@ -121,6 +253,17 @@ export default function SearchScreen() {
                         autoCorrect={false}
                         clearButtonMode="while-editing"
                     />
+                    <TouchableOpacity
+                        onPress={handleVoicePress}
+                        style={styles.voiceButton}
+                        accessibilityLabel="Voice search"
+                    >
+                        <Ionicons
+                            name={isListening ? 'mic' : 'mic-outline'}
+                            size={20}
+                            color={isListening ? COLORS.accent : COLORS.textSecondary}
+                        />
+                    </TouchableOpacity>
                     {query.length > 0 && Platform.OS !== 'ios' && (
                         <TouchableOpacity onPress={handleClear}>
                             <Ionicons name="close-circle" size={20} color={COLORS.textSecondary} />
@@ -152,14 +295,14 @@ export default function SearchScreen() {
                             <TouchableOpacity
                                 key={item.id}
                                 style={styles.topSearchItem}
-                                onPress={() => handleSuggestionClick(item.title)}
+                                onPress={() => handleSuggestionClick(item.title || item.name || 'Untitled')}
                                 activeOpacity={0.7}
                             >
                                 <View style={styles.topSearchLeft}>
                                     <View style={styles.thumbnailWrapper}>
                                         <MovieCard movie={item} width={100} height={60} showRating={false} />
                                     </View>
-                                    <Text style={styles.topSearchTitle} numberOfLines={1}>{item.title}</Text>
+                                    <Text style={styles.topSearchTitle} numberOfLines={1}>{item.title || item.name || 'Untitled'}</Text>
                                 </View>
                                 <Ionicons name="play-circle-outline" size={28} color={COLORS.text} />
                             </TouchableOpacity>
@@ -232,6 +375,11 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
         borderWidth: 1.5,
         borderColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    voiceButton: {
+        padding: 6,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
     },
     input: {
         flex: 1,
