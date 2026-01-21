@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Dimensions,
+    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -19,6 +20,7 @@ import Animated, {
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+import YoutubePlayer from 'react-native-youtube-iframe';
 
 import { FullScreenLoader, MovieRow } from '../../src/components';
 import {
@@ -192,10 +194,14 @@ export default function MovieDetailsScreen() {
     // Fetch movie details using Supabase hook
     const { movie, similar, loading, error, refetch } = useSupabaseMovieDetails(movieId || null);
 
-    // Handle play trailer (Not yet available in Supabase, using placeholder)
+    // Trailer modal state
+    const [showTrailer, setShowTrailer] = useState(false);
+
+    // Handle play trailer
     const handlePlayTrailer = useCallback(() => {
-        // TODO: Implement trailer linking when available
-        console.log('Play Trailer for:', movie?.title);
+        if (movie?.trailer_youtube_id) {
+            setShowTrailer(true);
+        }
     }, [movie]);
 
     // Handle add to My List
@@ -310,10 +316,10 @@ export default function MovieDetailsScreen() {
                     <Animated.View style={styles.actionsRow} entering={FadeInUp.delay(200)}>
                         <ActionButton
                             icon="play"
-                            label="No Trailer"
+                            label={movie.trailer_youtube_id ? 'Play Trailer' : 'No Trailer'}
                             onPress={handlePlayTrailer}
                             primary
-                            disabled
+                            disabled={!movie.trailer_youtube_id}
                         />
                         <ActionButton
                             icon="add"
@@ -363,6 +369,41 @@ export default function MovieDetailsScreen() {
                 {/* Bottom Spacer */}
                 <View style={styles.bottomSpacer} />
             </ScrollView>
+
+            {/* Trailer Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={showTrailer}
+                onRequestClose={() => setShowTrailer(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Trailer</Text>
+                            <Pressable
+                                onPress={() => setShowTrailer(false)}
+                                style={styles.closeButton}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.text} />
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.videoContainer}>
+                            <YoutubePlayer
+                                height={240}
+                                play={true}
+                                videoId={movie.trailer_youtube_id || undefined}
+                                onChangeState={(state: string) => {
+                                    if (state === 'ended') {
+                                        setShowTrailer(false);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -620,5 +661,41 @@ const styles = StyleSheet.create({
         color: COLORS.text,
         fontSize: FONT_SIZES.md,
         fontWeight: FONT_WEIGHTS.bold,
+    },
+
+    // Modal Styles
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    },
+    modalContent: {
+        width: '100%',
+        backgroundColor: COLORS.backgroundSecondary,
+        borderTopLeftRadius: BORDER_RADIUS.lg,
+        borderTopRightRadius: BORDER_RADIUS.lg,
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: SPACING.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    modalTitle: {
+        color: COLORS.text,
+        fontSize: FONT_SIZES.lg,
+        fontWeight: FONT_WEIGHTS.bold,
+    },
+    closeButton: {
+        padding: SPACING.xs,
+    },
+    videoContainer: {
+        width: '100%',
+        aspectRatio: 16 / 9,
+        backgroundColor: '#000',
     },
 });
