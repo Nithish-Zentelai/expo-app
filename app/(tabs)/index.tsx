@@ -1,6 +1,5 @@
 /**
- * Home screen with sliding hero banner and functional category filters
- * Now using Supabase for dynamic data fetching
+ * Home screen with sliding hero banner and TMDB-powered sections
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +19,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { HeroBanner, HomeScreenSkeleton, MovieRow, NumberedMovieRow } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
-import { useSupabaseHomeData } from '../../src/hooks/useSupabaseMovies';
+import { useHomeData } from '../../src/hooks/useMovies';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -65,17 +64,16 @@ const Header = ({ activeCategory, onCategoryChange }: { activeCategory: Category
 const Footer = () => (
     <View style={styles.footer}>
         <Text style={styles.footerText}>
-            Powered by Supabase • Dynamic content from your database
+            This product uses the TMDB API but is not endorsed or certified by TMDB.
         </Text>
-        <Text style={styles.footerCopyright}>© 2025 Matrix • All Rights Reserved</Text>
+        <Text style={styles.footerCopyright}>© 2026 Matrix • All Rights Reserved</Text>
     </View>
 );
 
 // ============ Home Screen Component ============
 
 export default function HomeScreen() {
-    // Use Supabase hook for data fetching
-    const { data, loading, error, refetch } = useSupabaseHomeData();
+    const { data, loading, error, refetch } = useHomeData();
     const [refreshing, setRefreshing] = useState(false);
     const [activeCategory, setActiveCategory] = useState<Category>('Home');
 
@@ -89,11 +87,10 @@ export default function HomeScreen() {
         if (loading) return null;
 
         if (activeCategory === 'TV Shows') {
-            // For now, show new releases as "TV Shows" content
             return (
                 <Animated.View entering={FadeInDown}>
-                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} />
-                    <MovieRow title="Bingeworthy Stories" movies={[...data.newReleases].reverse()} loading={loading} variant="backdrop" />
+                    <MovieRow title="Trending Today" movies={data.trending} loading={loading} />
+                    <MovieRow title="Upcoming / New Releases" movies={data.upcoming} loading={loading} variant="backdrop" />
                 </Animated.View>
             );
         }
@@ -101,9 +98,9 @@ export default function HomeScreen() {
         if (activeCategory === 'Movies') {
             return (
                 <Animated.View entering={FadeInDown}>
-                    <MovieRow title="Blockbusters" movies={data.popular} loading={loading} />
-                    <MovieRow title="Critically Acclaimed" movies={data.topRated} loading={loading} variant="backdrop" />
-                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} />
+                    <MovieRow title="Popular" movies={data.popular} loading={loading} />
+                    <MovieRow title="Top Rated" movies={data.topRated} loading={loading} variant="backdrop" />
+                    <MovieRow title="Upcoming / New Releases" movies={data.upcoming} loading={loading} />
                 </Animated.View>
             );
         }
@@ -127,15 +124,15 @@ export default function HomeScreen() {
         return (
             <>
                 <Animated.View entering={FadeInDown.delay(200)}>
-                    <NumberedMovieRow title="Top 10 Today" movies={data.trending} loading={loading} />
+                    <NumberedMovieRow title="Top 10 Trending Today" movies={data.trending} loading={loading} />
                 </Animated.View>
 
                 <Animated.View entering={FadeInDown.delay(300)}>
-                    <MovieRow title="Popular on Matrix" movies={data.popular} loading={loading} />
+                    <MovieRow title="Popular" movies={data.popular} loading={loading} />
                 </Animated.View>
 
                 <Animated.View entering={FadeInDown.delay(400)}>
-                    <MovieRow title="New Releases" movies={data.newReleases} loading={loading} variant="backdrop" />
+                    <MovieRow title="Upcoming / New Releases" movies={data.upcoming} loading={loading} variant="backdrop" />
                 </Animated.View>
 
                 <Animated.View entering={FadeInDown.delay(500)}>
