@@ -29,8 +29,6 @@ import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
 import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const Voice = Platform.OS === 'web' ? null : require('@react-native-voice/voice').default;
-
 export default function SearchScreen() {
     const {
         data: results = [],
@@ -44,7 +42,20 @@ export default function SearchScreen() {
     const recognitionRef = useRef<any>(null);
     const [isListening, setIsListening] = useState(false);
     const [isVoiceSupported, setIsVoiceSupported] = useState(false);
+    const [voiceModule, setVoiceModule] = useState<any>(null);
 
+    useEffect(() => {
+        if (Platform.OS === 'web') return;
+        try {
+            // Load voice module only on native to avoid crashing Expo Go when unavailable
+            const mod = require('@react-native-voice/voice').default;
+            setVoiceModule(mod);
+        } catch {
+            setVoiceModule(null);
+        }
+    }, []);
+
+    // Voice assistant setup (web SpeechRecognition vs native Voice)
     useEffect(() => {
         if (Platform.OS === 'web') {
             if (typeof window === 'undefined') return;
@@ -56,6 +67,7 @@ export default function SearchScreen() {
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
+            // Web result handler: push transcript into search + input
             recognition.onresult = (event: any) => {
                 const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
                 if (transcript.trim()) {
@@ -74,21 +86,25 @@ export default function SearchScreen() {
             };
         }
 
-        if (!Voice) return;
+        if (!voiceModule) {
+            setIsVoiceSupported(false);
+            return;
+        }
 
-        Voice.onSpeechResults = (event: { value?: string[] }) => {
+        // Native result handler: push transcript into search + input
+        voiceModule.onSpeechResults = (event: { value?: string[] }) => {
             const transcript = event?.value?.[0] ?? '';
             if (transcript.trim()) {
                 search(transcript);
                 syncInputText(transcript);
             }
         };
-        Voice.onSpeechEnd = () => setIsListening(false);
-        Voice.onSpeechError = () => setIsListening(false);
+        voiceModule.onSpeechEnd = () => setIsListening(false);
+        voiceModule.onSpeechError = () => setIsListening(false);
 
         const checkAvailability = async () => {
             try {
-                const available = await Voice.isAvailable();
+                const available = await voiceModule.isAvailable();
                 setIsVoiceSupported(Boolean(available));
             } catch {
                 setIsVoiceSupported(false);
@@ -98,10 +114,11 @@ export default function SearchScreen() {
         checkAvailability();
 
         return () => {
-            Voice.destroy().then(Voice.removeAllListeners);
+            voiceModule.destroy().then(voiceModule.removeAllListeners);
         };
-    }, [search]);
+    }, [search, voiceModule]);
 
+    // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
         const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
         if (input && typeof input.setNativeProps === 'function') {
@@ -131,6 +148,7 @@ export default function SearchScreen() {
         Keyboard.dismiss();
     };
 
+    // Android-only mic permission before starting native voice recognition
     const requestAudioPermission = async () => {
         if (Platform.OS !== 'android') return true;
         const granted = await PermissionsAndroid.request(
@@ -144,6 +162,7 @@ export default function SearchScreen() {
         return granted === PermissionsAndroid.RESULTS.GRANTED;
     };
 
+    // Mic button toggles listening state
     const handleVoicePress = async () => {
         if (!isVoiceSupported) {
             if (Platform.OS === 'web') {
@@ -177,12 +196,12 @@ export default function SearchScreen() {
             }
 
             if (isListening) {
-                await Voice.stop();
+                await voiceModule.stop();
                 setIsListening(false);
                 return;
             }
 
-            await Voice.start('en-US');
+            await voiceModule.start('en-US');
             setIsListening(true);
         } catch {
             setIsListening(false);
