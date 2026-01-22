@@ -31,8 +31,13 @@ import {
     SPACING,
 } from '../../src/constants/theme';
 import { useMovieDetails } from '../../src/hooks/useMovies';
+import { useSupabaseMovieDetails } from '../../src/hooks/useSupabaseMovies';
 import { Genre } from '../../src/api/tmdb';
 import { getBackdropUrl, getPosterUrl } from '../../src/utils/image';
+import {
+    mapSupabaseMovieToTmdbDetails,
+    mapSupabaseMoviesToTmdb
+} from '../../src/utils/movie';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 400;
@@ -191,16 +196,35 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry: () => void
 export default function MovieDetailsScreen() {
     // Get movie ID from route params (TMDB numeric string)
     const { id: movieId } = useLocalSearchParams<{ id: string }>();
-    const movieIdNumber = movieId ? Number(movieId) : null;
+    const isDbMovie = Boolean(movieId && movieId.startsWith('db_'));
+    const dbMovieId = isDbMovie ? movieId!.replace('db_', '') : null;
+    const movieIdNumber = !isDbMovie && movieId ? Number(movieId) : null;
 
     // Fetch movie details from TMDB
     const { movie, similar, loading, error, refetch, trailer } = useMovieDetails(
         Number.isFinite(movieIdNumber) ? movieIdNumber : null
     );
+    const {
+        movie: dbMovie,
+        similar: dbSimilar,
+        loading: dbLoading,
+        error: dbError,
+        refetch: dbRefetch
+    } = useSupabaseMovieDetails(dbMovieId);
+
+    const resolvedMovie = isDbMovie
+        ? (dbMovie ? mapSupabaseMovieToTmdbDetails(dbMovie, dbMovie.categories) : null)
+        : movie;
+    const resolvedSimilar = isDbMovie ? mapSupabaseMoviesToTmdb(dbSimilar) : similar;
+    const resolvedLoading = isDbMovie ? dbLoading : loading;
+    const resolvedError = isDbMovie ? dbError : error;
+    const resolvedRefetch = isDbMovie ? dbRefetch : refetch;
 
     // Trailer modal state
     const [showTrailer, setShowTrailer] = useState(false);
-    const trailerKey = trailer?.site === 'YouTube' ? trailer.key : undefined;
+    const trailerKey = isDbMovie
+        ? (dbMovie?.trailer_youtube_id ?? undefined)
+        : (trailer?.site === 'YouTube' ? trailer.key : undefined);
 
     // Handle play trailer
     const handlePlayTrailer = useCallback(() => {
@@ -213,22 +237,22 @@ export default function MovieDetailsScreen() {
     const handleAddToList = useCallback(() => {
         // TODO: Implement My List functionality
         console.log('Add to My List:', movie?.title);
-    }, [movie]);
+    }, [resolvedMovie]);
 
     // Format duration
     const formattedRuntime = useMemo(() => {
-        if (!movie?.runtime) return null;
-        const hours = Math.floor(movie.runtime / 60);
-        const minutes = movie.runtime % 60;
+        if (!resolvedMovie?.runtime) return null;
+        const hours = Math.floor(resolvedMovie.runtime / 60);
+        const minutes = resolvedMovie.runtime % 60;
         return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    }, [movie?.runtime]);
+    }, [resolvedMovie?.runtime]);
 
-    const backdropUrl = getBackdropUrl(movie?.backdrop_path ?? movie?.poster_path, 'original');
-    const posterUrl = getPosterUrl(movie?.poster_path, 'large');
-    const releaseYear = movie?.release_date ? movie.release_date.split('-')[0] : '—';
+    const backdropUrl = getBackdropUrl(resolvedMovie?.backdrop_path ?? resolvedMovie?.poster_path, 'original');
+    const posterUrl = getPosterUrl(resolvedMovie?.poster_path, 'large');
+    const releaseYear = resolvedMovie?.release_date ? resolvedMovie.release_date.split('-')[0] : '—';
 
     // Show loading state
-    if (loading) {
+    if (resolvedLoading) {
         return (
             <View style={styles.container}>
                 <FullScreenLoader message="Loading movie details..." />
@@ -237,11 +261,11 @@ export default function MovieDetailsScreen() {
     }
 
     // Show error state
-    if (error || !movie) {
+    if (resolvedError || !resolvedMovie) {
         return (
             <ErrorState
-                message={error || 'Movie not found'}
-                onRetry={refetch}
+                message={resolvedError || 'Movie not found'}
+                onRetry={resolvedRefetch}
             />
         );
     }
@@ -288,13 +312,13 @@ export default function MovieDetailsScreen() {
                             />
                         )}
                         <View style={styles.titleContainer}>
-                            <Text style={styles.title}>{movie.title}</Text>
+                            <Text style={styles.title}>{resolvedMovie.title}</Text>
 
                             {/* Meta Info */}
                             <View style={styles.metaRow}>
                                 <View style={styles.ratingContainer}>
                                     <Ionicons name="star" size={16} color={COLORS.accentGold} />
-                                    <Text style={styles.rating}>{(movie.vote_average || 0).toFixed(1)}</Text>
+                                    <Text style={styles.rating}>{(resolvedMovie.vote_average || 0).toFixed(1)}</Text>
                                 </View>
                                 <Text style={styles.metaSeparator}>•</Text>
                                 <Text style={styles.year}>{releaseYear}</Text>
@@ -308,7 +332,7 @@ export default function MovieDetailsScreen() {
 
                             {/* Genres / Categories */}
                             <View style={styles.genresContainer}>
-                                {movie.genres?.map((category) => (
+                                {resolvedMovie.genres?.map((category) => (
                                     <GenreChip key={category.id} category={category} />
                                 ))}
                             </View>
@@ -334,12 +358,12 @@ export default function MovieDetailsScreen() {
                     {/* Overview */}
                     <Animated.View entering={FadeInDown.delay(300)}>
                         <Text style={styles.sectionTitle}>Overview</Text>
-                        <Text style={styles.overview}>{movie.overview || 'No overview available.'}</Text>
+                        <Text style={styles.overview}>{resolvedMovie.overview || 'No overview available.'}</Text>
                     </Animated.View>
 
                     {/* Additional Info */}
                     <Animated.View style={styles.additionalInfo} entering={FadeInDown.delay(350)}>
-                        <InfoRow icon="calendar-outline" label="Release Date" value={movie.release_date || '—'} />
+                        <InfoRow icon="calendar-outline" label="Release Date" value={resolvedMovie.release_date || '—'} />
                         <InfoRow icon="film-outline" label="Format" value="4K Ultra HD" />
                         <InfoRow icon="information-circle-outline" label="Availability" value="Streaming Now" />
                     </Animated.View>
@@ -354,11 +378,11 @@ export default function MovieDetailsScreen() {
                 </View>
 
                 {/* Similar Movies */}
-                {similar.length > 0 && (
+                {resolvedSimilar.length > 0 && (
                     <Animated.View entering={FadeInDown.delay(500)}>
                         <MovieRow
                             title="More Like This"
-                            movies={similar}
+                            movies={resolvedSimilar}
                         />
                     </Animated.View>
                 )}

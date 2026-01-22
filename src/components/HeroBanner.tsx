@@ -25,6 +25,7 @@ import {
 } from '../constants/theme';
 import { Movie } from '../api/tmdb';
 import { getBackdropUrl } from '../utils/image';
+import { getMovieRouteId } from '../utils/movie';
 import { HeroBannerSkeleton } from './Loader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -42,7 +43,7 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
     const overview = movie.overview || 'No overview available.';
 
     const handlePress = useCallback(() => {
-        router.push(`/movie/${movie.id}`);
+        router.push(`/movie/${getMovieRouteId(movie)}`);
     }, [movie.id]);
 
     return (
@@ -110,15 +111,15 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
 export const HeroBanner = memo(({ movies, loading = false }: HeroBannerProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
 
-    if (loading || !movies || movies.length === 0) {
-        return <HeroBannerSkeleton />;
-    }
-
     const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
         if (viewableItems.length > 0) {
             setActiveIndex(viewableItems[0].index);
         }
     }).current;
+
+    if (loading || !movies || movies.length === 0) {
+        return <HeroBannerSkeleton />;
+    }
 
     return (
         <View style={styles.container}>

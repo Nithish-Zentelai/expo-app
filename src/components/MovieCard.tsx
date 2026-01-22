@@ -23,6 +23,7 @@ import Animated, {
 import { Movie } from '../api/tmdb';
 import { BORDER_RADIUS, CARD_DIMENSIONS, COLORS, FONT_SIZES, SPACING } from '../constants/theme';
 import { getBackdropUrl, getPosterUrl } from '../utils/image';
+import { getMovieRouteId } from '../utils/movie';
 
 // ============ Types ============
 
@@ -74,7 +75,7 @@ export const MovieCard = memo(({
 
     // Navigate to movie details
     const handlePress = useCallback(() => {
-        router.push(`/movie/${movie.id}`);
+        router.push(`/movie/${getMovieRouteId(movie)}`);
     }, [movie.id]);
 
     // Animated styles
@@ -177,7 +178,7 @@ export const LargeMovieCard = memo(({ movie, onPress }: LargeMovieCardProps) => 
         if (onPress) {
             onPress();
         } else {
-            router.push(`/movie/${movie.id}`);
+            router.push(`/movie/${getMovieRouteId(movie)}`);
         }
     }, [movie.id, onPress]);
 
