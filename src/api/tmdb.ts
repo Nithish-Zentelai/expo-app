@@ -8,9 +8,13 @@ import axios from 'axios';
 
 // ============ Configuration ============
 
-// Use provided key or environment variable
-const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY || 'f31d36c9159f47d463d2f0919e23b20e';
+// Use API key from environment (.env -> EXPO_PUBLIC_TMDB_API_KEY)
+const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
 const BASE_URL = 'https://api.themoviedb.org/3';
+
+if (!API_KEY) {
+    console.warn('[MatrixFlix] Missing EXPO_PUBLIC_TMDB_API_KEY in environment.');
+}
 
 const api = axios.create({
     baseURL: BASE_URL,

@@ -5,6 +5,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
 import { Dimensions, Platform, StyleSheet, View } from 'react-native';
@@ -31,10 +32,12 @@ interface TabIconProps {
 function TabBarIcon({ name, focused, color }: TabIconProps) {
     const scale = useSharedValue(focused ? 1 : 0.9);
 
-    scale.value = withSpring(focused ? 1.1 : 0.95, {
-        damping: 12,
-        stiffness: 200,
-    });
+    React.useEffect(() => {
+        scale.value = withSpring(focused ? 1.1 : 0.95, {
+            damping: 12,
+            stiffness: 200,
+        });
+    }, [focused, scale]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [

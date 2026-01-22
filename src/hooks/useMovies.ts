@@ -20,6 +20,9 @@ import {
     getUpcoming,
     searchMovies,
 } from '../api/tmdb';
+import { getHomeScreenData as getSupabaseHomeScreenData } from '../api/supabaseApi';
+import type { HomeScreenData as SupabaseHomeScreenData } from '../types/database.types';
+import { mapSupabaseMoviesToTmdb } from '../utils/movie';
 
 // ============ Types ============
 
@@ -271,6 +274,16 @@ interface HomeScreenData {
     heroMovie: Movie | null;
 }
 
+const mapSupabaseHomeToTmdb = (data: SupabaseHomeScreenData): HomeScreenData => {
+    const trending = mapSupabaseMoviesToTmdb(data.trending);
+    const popular = mapSupabaseMoviesToTmdb(data.popular);
+    const topRated = mapSupabaseMoviesToTmdb(data.topRated);
+    const upcoming = mapSupabaseMoviesToTmdb(data.newReleases);
+    const heroMovie = trending[0] || popular[0] || upcoming[0] || null;
+
+    return { trending, popular, topRated, upcoming, heroMovie };
+};
+
 export const useHomeData = (): UseHomeDataState => {
     const [data, setData] = useState<HomeScreenData>({
         trending: [],
@@ -286,6 +299,7 @@ export const useHomeData = (): UseHomeDataState => {
     const fetchHomeData = useCallback(async () => {
         try {
             setLoading(true);
+            setError(null);
             const [trendingRes, popularRes, topRatedRes, upcomingRes] =
                 await Promise.all([
                     getTrending('day'),
@@ -304,7 +318,14 @@ export const useHomeData = (): UseHomeDataState => {
                 });
             }
         } catch (err) {
-            if (isMounted.current) setError('Failed to load home data');
+            try {
+                const supabaseData = await getSupabaseHomeScreenData();
+                if (isMounted.current) {
+                    setData(mapSupabaseHomeToTmdb(supabaseData));
+                }
+            } catch (dbErr) {
+                if (isMounted.current) setError('Failed to load home data');
+            }
         } finally {
             if (isMounted.current) setLoading(false);
         }
