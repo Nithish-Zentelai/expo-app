@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": " ",
-    "slug": "Matrix",
+    "name": "matrix",
+    "slug": "matrix",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "matrix",
     "userInterfaceStyle": "dark",
     "newArchEnabled": false,
+     "entryPoint": "./node_modules/expo-router/entry",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.matrix"
@@ -21,13 +22,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "9168fd8f-ddb0-4818-929a-2f5930e8f6d0"
+        "projectId": "9704e30a-37aa-4a92-a510-1796e6fab97c"
       }
     },
-    "owner": "nithishh"
+    "owner": "jeevan-zentelai"
   }
 }
