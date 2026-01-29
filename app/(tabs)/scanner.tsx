@@ -95,10 +95,10 @@ export default function ScannerScreen() {
         ? capturedImageBase64
         : await convertUriToBase64(capturedImage);
 
-      // Prefer Gemini if a key is provided; otherwise fall back to the free OCR.Space demo key.
-      const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+      // Use Gemini API with hardcoded key
+      const geminiKey = 'AIzaSyDSD2fpsXpk-RVbV2CPEStxvNqDcUH8wtQ';
       if (geminiKey) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
 
         const body = {
           contents: [
@@ -106,7 +106,7 @@ export default function ScannerScreen() {
               parts: [
                 {
                   text:
-                    'Extract any readable text from this image. Return JSON with fields: text, labels (array), confidence (0-1). If unsure, estimate.',
+                    'identify and tell more data  about the image . Return JSON with fields: text, labels (array), confidence (0-1). If unsure, estimate.',
                 },
                 {
                   inline_data: {
@@ -288,14 +288,14 @@ export default function ScannerScreen() {
                   style={[styles.button, { backgroundColor: colors.tint }]}
                   onPress={() => setIsCameraActive(true)}
                 >
-                  <Text style={styles.buttonText}>📷 Capture Photo</Text>
+                  <Text style={styles.buttonText}> Capture Photo</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.button, { backgroundColor: colors.tabIconDefault }]}
                   onPress={handlePickImage}
                 >
-                  <Text style={styles.buttonText}>🖼️ Choose from Gallery</Text>
+                  <Text style={styles.buttonText}> Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -400,7 +400,7 @@ export default function ScannerScreen() {
               style={[styles.button, { backgroundColor: colors.tint }]}
               onPress={resetScanner}
             >
-              <Text style={styles.buttonText}>↻ Scan Again</Text>
+              <Text style={styles.buttonText}> Scan Again</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: 'white',
+    color: '#000000',
     fontSize: 16,
     fontWeight: '600',
   },
