@@ -128,6 +128,20 @@ export default function TabLayout() {
                     ),
                 }}
             />
+
+             <Tabs.Screen
+                name="scaner"
+                options={{
+                    title: 'Scanner',
+                    tabBarIcon: ({ color, focused }) => (
+                        <TabBarIcon
+                            name={focused ? 'person' : 'person-outline'}
+                            focused={focused}
+                            color={color}
+                        />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
