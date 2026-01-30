@@ -407,13 +407,12 @@ export default function ScannerScreen() {
                                 <View style={styles.arrayContainer}>
                                   {value.map((item: any, idx: number) => (
                                     <View key={idx} style={styles.arrayItem}>
-                                      {item.actor && item.role && (
+                                      {(item.actor || item.role) ? (
                                         <ThemedText style={styles.castItem}>
-                                          {item.actor} <ThemedText style={styles.roleText}>as</ThemedText> {item.role}
+                                          {item.actor || 'Unknown'} <ThemedText style={styles.roleText}>as</ThemedText> {item.role || 'Unknown'}
                                         </ThemedText>
-                                      )}
-                                      {!item.actor && !item.role && (
-                                        <ThemedText style={styles.dataValueFormatted}>{String(item)}</ThemedText>
+                                      ) : (
+                                        <ThemedText style={styles.dataValueFormatted}>{JSON.stringify(item)}</ThemedText>
                                       )}
                                     </View>
                                   ))}
