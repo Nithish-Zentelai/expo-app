@@ -432,65 +432,43 @@ export default function ScannerScreen() {
                     <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
                   </View>
                   <View style={styles.extractedDataContent}>
-                    {/* Debug: Show if extractedData exists */}
-                    {console.log('DEBUG: extractedData.extractedData =', extractedData.extractedData)}
-                    {console.log('DEBUG: normalizeDisplayEntries result =', normalizeDisplayEntries(extractedData.extractedData))}
-                    
-                    {/* Try to display extractedData first */}
                     {extractedData.extractedData && typeof extractedData.extractedData === 'object' ? (
-                      normalizeDisplayEntries(extractedData.extractedData).length > 0 ? (
+                      normalizeDisplayEntries(extractedData.extractedData)
+                        .filter(
+                          ([k, v]) =>
+                            v !== null &&
+                            v !== undefined &&
+                            String(v).trim() !== '' &&
+                            String(v).trim().toUpperCase() !== 'N/A'
+                        )
+                        .length > 0 ? (
                         normalizeDisplayEntries(extractedData.extractedData)
                           .filter(
                             ([k, v]) =>
                               v !== null &&
                               v !== undefined &&
                               String(v).trim() !== '' &&
-                              String(v) !== 'N/A'
+                              String(v).trim().toUpperCase() !== 'N/A'
                           )
                           .map(([key, value], index) => (
                             <View key={index} style={styles.dataItem}>
                               <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                              <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
-                                {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                              <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
+                                {String(value)}
                               </ThemedText>
                             </View>
                           ))
                       ) : (
                         <View style={styles.noDataContainer}>
-                          <ThemedText style={styles.noDataText}>No data extracted from response</ThemedText>
-                          <ThemedText style={styles.debugText}>
-                            Response structure: {JSON.stringify(Object.keys(extractedData.extractedData || {})).substring(0, 100)}
-                          </ThemedText>
+                          <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
                         </View>
                       )
                     ) : (
                       <View style={styles.noDataContainer}>
-                        <ThemedText style={styles.noDataText}>No extracted data object</ThemedText>
-                        <ThemedText style={styles.debugText}>
-                          Available keys: {JSON.stringify(Object.keys(extractedData || {})).substring(0, 100)}
-                        </ThemedText>
+                        <ThemedText style={styles.noDataText}>No extracted data found</ThemedText>
                       </View>
                     )}
                   </View>
-                </View>
-              )}
-
-              {/* Battery Information - Removed if not needed */}
-              {/* IMEI Information - Removed if not needed */}
-              {/* Raw Data from About Section - Removed if not needed */}
-              {/* Media Information - Removed if not needed */}
-
-              {/* Warnings if any */}
-              {extractedData.warnings && Array.isArray(extractedData.warnings) && extractedData.warnings.length > 0 && (
-                <View style={[styles.infoCard, styles.warningCard]}>
-                  <ThemedText style={styles.warningTitle}>⚠️ Warnings</ThemedText>
-                  {extractedData.warnings.map((warning, index) => (
-                    <View key={index} style={styles.warningItem}>
-                      <ThemedText style={styles.warningText}>
-                        • {warning.message}
-                      </ThemedText>
-                    </View>
-                  ))}
                 </View>
               )}
             </View>
@@ -794,13 +772,6 @@ const styles = StyleSheet.create({
   },
   noDataContainer: {
     paddingVertical: 20,
-  },
-  debugText: {
-    fontSize: 11,
-    color: '#999999',
-    textAlign: 'center',
-    marginTop: 8,
-    fontFamily: 'monospace',
   },
   actionButtons: {
     marginTop: 20,
