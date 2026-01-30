@@ -74,9 +74,14 @@ export default function SearchScreen() {
                     search(transcript);
                     syncInputText(transcript);
                 }
+                setIsListening(false);
             };
             recognition.onend = () => setIsListening(false);
-            recognition.onerror = () => setIsListening(false);
+            recognition.onerror = (event: any) => {
+                console.error('Web speech error:', event.error);
+                setIsListening(false);
+                Alert.alert('Voice Error', 'Could not recognize speech. Please try again.');
+            };
 
             recognitionRef.current = recognition;
             setIsVoiceSupported(true);
@@ -97,10 +102,15 @@ export default function SearchScreen() {
             if (transcript.trim()) {
                 search(transcript);
                 syncInputText(transcript);
+                setIsListening(false);
             }
         };
         voiceModule.onSpeechEnd = () => setIsListening(false);
-        voiceModule.onSpeechError = () => setIsListening(false);
+        voiceModule.onSpeechError = (error: any) => {
+            console.error('Voice recognition error:', error);
+            setIsListening(false);
+            Alert.alert('Voice Error', 'Could not recognize speech. Please try again.');
+        };
 
         const checkAvailability = async () => {
             try {
@@ -120,9 +130,18 @@ export default function SearchScreen() {
 
     // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
-        const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
-        if (input && typeof input.setNativeProps === 'function') {
-            input.setNativeProps({ text });
+        try {
+            const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
+            if (input && typeof input.setNativeProps === 'function') {
+                input.setNativeProps({ text });
+            } else if (input && 'clear' in input) {
+                // Fallback: clear and focus then let the search function update
+                setTimeout(() => {
+                    inputRef.current?.clear();
+                }, 0);
+            }
+        } catch (error) {
+            console.warn('Could not sync input text:', error);
         }
     };
 
@@ -166,7 +185,7 @@ export default function SearchScreen() {
     const handleVoicePress = async () => {
         if (!isVoiceSupported) {
             if (Platform.OS === 'web') {
-                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
+                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition. Please use Chrome, Edge, or Safari.');
             } else {
                 Alert.alert('Voice search unavailable', 'Speech recognition is not available on this device.');
             }
@@ -182,8 +201,10 @@ export default function SearchScreen() {
             try {
                 recognitionRef.current?.start?.();
                 setIsListening(true);
-            } catch {
+            } catch (error) {
+                console.error('Web voice error:', error);
                 setIsListening(false);
+                Alert.alert('Voice Error', 'Failed to start speech recognition.');
             }
             return;
         }
@@ -191,7 +212,7 @@ export default function SearchScreen() {
         try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
-                Alert.alert('Microphone permission denied', 'Enable microphone access to use voice search.');
+                Alert.alert('Microphone permission denied', 'Enable microphone access in settings to use voice search.');
                 return;
             }
 
@@ -203,8 +224,10 @@ export default function SearchScreen() {
 
             await voiceModule.start('en-US');
             setIsListening(true);
-        } catch {
+        } catch (error) {
+            console.error('Native voice error:', error);
             setIsListening(false);
+            Alert.alert('Voice Error', 'Could not start voice recognition. Please try again.');
         }
     };
 
