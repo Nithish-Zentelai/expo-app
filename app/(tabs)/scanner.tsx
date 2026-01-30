@@ -14,7 +14,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/themes';
+import { Colors } from '@/constants/expo-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { COLORS } from '@/src/constants/theme';
 
