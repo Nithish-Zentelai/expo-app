@@ -68,70 +68,44 @@ export default function ScannerScreen() {
   const normalizeDisplayEntries = (obj: any) => {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
     try {
-      const entries = Object.entries(obj) as [string, any][];
-      const batteryCandidates = [
-        'Battery Percentage',
-        'Battery Percentage (%)',
-        'Battery Health (%)',
-        'Maximum Capacity',
-        'Battery Level',
-        'Battery Status',
-        'Battery',
-        'Battery Condition',
-      ];
-
-      const mapKey = (k: string) => {
-        const bk = k.toLowerCase();
-        if (
-          bk.includes('battery percentage') ||
-          bk.includes('battery level') ||
-          bk.includes('maximum capacity') ||
-          bk === 'battery' ||
-          bk.includes('battery status') ||
-          bk.includes('battery condition')
-        ) {
-          return 'Battery Health';
-        }
-        if (bk.includes('mobile (imei') || bk.startsWith('imei')) return k;
-        return k;
+      // Define field display names and types
+      const fieldConfig: Record<string, { label: string; type: 'string' | 'array' | 'object' | 'number' }> = {
+        title: { label: 'Title', type: 'string' },
+        original_title: { label: 'Original Title', type: 'string' },
+        year: { label: 'Year', type: 'string' },
+        description: { label: 'Description', type: 'string' },
+        director: { label: 'Director', type: 'string' },
+        writers: { label: 'Writers', type: 'array' },
+        producers: { label: 'Producers', type: 'array' },
+        cast: { label: 'Cast', type: 'array' },
+        genres: { label: 'Genres', type: 'array' },
+        runtime_minutes: { label: 'Runtime', type: 'number' },
+        rating: { label: 'Rating', type: 'string' },
+        language: { label: 'Language', type: 'string' },
+        country: { label: 'Country', type: 'string' },
+        release_date: { label: 'Release Date', type: 'string' },
+        imdb_id: { label: 'IMDb ID', type: 'string' },
+        production_company: { label: 'Production Company', type: 'string' },
+        distributor: { label: 'Distributor', type: 'string' },
       };
 
-      const findBatteryPercentage = (source: any) => {
-        if (!source || typeof source !== 'object') return undefined;
-        for (const k of batteryCandidates) {
-          const v = source[k];
-          if (v === null || v === undefined) continue;
-          const s = String(v).trim();
-          const m = s.match(/(\d{1,3})\s*%?/);
-          if (m) return `${m[1]}%`;
-        }
-        const lower = Object.keys(source).reduce((acc: any, key) => {
-          acc[key.toLowerCase()] = source[key];
-          return acc;
-        }, {} as any);
-        for (const k of batteryCandidates) {
-          const v = lower[k.toLowerCase()];
-          if (v === null || v === undefined) continue;
-          const s = String(v).trim();
-          const m = s.match(/(\d{1,3})\s*%?/);
-          if (m) return `${m[1]}%`;
-        }
-        return undefined;
-      };
-
-      const out: Record<string, any> = {};
-      for (const [k, v] of entries) {
-        const nk = mapKey(k);
-        if (nk === 'Battery Health') {
-          const pct = findBatteryPercentage(obj);
-          if (pct) out[nk] = pct;
-          continue;
-        }
-        if (!out[nk] || out[nk] === '' || String(out[nk]) === 'N/A') {
-          out[nk] = v;
-        }
+      const out: [string, any][] = [];
+      
+      for (const [key, value] of Object.entries(obj)) {
+        // Skip if value is null or undefined
+        if (value === null || value === undefined) continue;
+        
+        // Skip empty arrays and empty strings
+        if (Array.isArray(value) && value.length === 0) continue;
+        if (typeof value === 'string' && value.trim() === '') continue;
+        
+        const config = fieldConfig[key];
+        const label = config?.label || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        
+        out.push([label, value]);
       }
-      return Object.entries(out) as [string, any][];
+      
+      return out;
     } catch (err) {
       console.error('normalizeDisplayEntries failed', err);
       return [];
@@ -198,25 +172,18 @@ export default function ScannerScreen() {
 
       // For React Native, use the URI directly with FormData
       const form = new FormData();
-      form.append('imageType', 'Settings Page');
-      form.append('receipt', {
+      form.append('image', {
         uri: capturedImage,
         type: 'image/jpeg',
         name: `capture-${Date.now()}.jpg`,
       } as any);
-      form.append('context_user', 'jeevan');
-
-      // Basic auth header
-      const username = 'tektech';
-      const password = 'Zx#Pq!8Mv@3R';
-      const basic = btoa(`${username}:${password}`);
 
       console.log('Uploading image to Zentel AI...');
       
-      const res = await fetch('https://api.zentelai.app/process-image-7', {
+      const res = await fetch('https://api.zentelai.app/movie', {
         method: 'POST',
         headers: {
-          Authorization: `Basic ${basic}`,
+          'context_user': 'jeevan',
         },
         body: form,
       });
@@ -236,20 +203,16 @@ export default function ScannerScreen() {
       console.log('API Response Keys:', Object.keys(result));
       console.log('Full Response Structure:', JSON.stringify(result, null, 2));
 
-      // Extract the nested extractedData properly
-      const nestedExtracted = result?.extractedData?.extractedData || result?.extractedData || result;
-      
       const extractedInfo: ExtractedData = {
-        text: result?.extracted_text || result?.text || 'No text extracted',
-        confidence: result?.confidence || 0.8,
-        labels: Array.isArray(result?.labels) ? result.labels : (Array.isArray(result?.categories) ? result.categories : []),
+        text: result?.title || 'No title extracted',
+        confidence: 0.95,
+        labels: result?.genres || [],
         rawResponse: result,
-        extractedData: nestedExtracted,
+        extractedData: result,
         ...result,
       };
 
       console.log('Extracted Info:', extractedInfo);
-      console.log('Extracted Data Content:', nestedExtracted);
       setExtractedData(extractedInfo);
     } catch (error) {
       console.error('API error:', error);
@@ -418,43 +381,74 @@ export default function ScannerScreen() {
               {extractedData && (
                 <View style={styles.extractedDataCard}>
                   <View style={styles.extractedCardHeader}>
-                    <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
+                    <ThemedText style={styles.extractedCardTitle}>
+                      {extractedData.title || 'Movie Information'}
+                    </ThemedText>
                   </View>
                   <View style={styles.extractedDataContent}>
                     {extractedData.extractedData && typeof extractedData.extractedData === 'object' ? (
-                      normalizeDisplayEntries(extractedData.extractedData)
-                        .filter(
-                          ([k, v]) =>
-                            v !== null &&
-                            v !== undefined &&
-                            String(v).trim() !== '' &&
-                            String(v).trim().toUpperCase() !== 'N/A'
-                        )
-                        .length > 0 ? (
-                        normalizeDisplayEntries(extractedData.extractedData)
-                          .filter(
-                            ([k, v]) =>
-                              v !== null &&
-                              v !== undefined &&
-                              String(v).trim() !== '' &&
-                              String(v).trim().toUpperCase() !== 'N/A'
-                          )
-                          .map(([key, value], index) => {
-                            let displayValue = '';
-                            if (typeof value === 'object' && value !== null) {
-                              displayValue = JSON.stringify(value, null, 2);
+                      normalizeDisplayEntries(extractedData.extractedData).length > 0 ? (
+                        normalizeDisplayEntries(extractedData.extractedData).map(([key, value], index) => {
+                          let displayContent = null;
+                          
+                          // Handle different data types
+                          if (Array.isArray(value)) {
+                            // Handle arrays (cast, genres, writers, etc.)
+                            if (value.length === 0) {
+                              displayContent = <ThemedText style={styles.dataValueFormatted}>—</ThemedText>;
+                            } else if (typeof value[0] === 'object' && value[0] !== null) {
+                              // Array of objects (cast)
+                              displayContent = (
+                                <View style={styles.arrayContainer}>
+                                  {value.map((item: any, idx: number) => (
+                                    <View key={idx} style={styles.arrayItem}>
+                                      {item.actor && item.role && (
+                                        <ThemedText style={styles.castItem}>
+                                          {item.actor} <ThemedText style={styles.roleText}>as</ThemedText> {item.role}
+                                        </ThemedText>
+                                      )}
+                                      {!item.actor && !item.role && (
+                                        <ThemedText style={styles.dataValueFormatted}>{String(item)}</ThemedText>
+                                      )}
+                                    </View>
+                                  ))}
+                                </View>
+                              );
                             } else {
-                              displayValue = String(value);
+                              // Array of strings (genres, writers, etc.)
+                              displayContent = (
+                                <View style={styles.tagsContainer}>
+                                  {value.map((item: any, idx: number) => (
+                                    <View key={idx} style={styles.tag}>
+                                      <ThemedText style={styles.tagText}>{String(item)}</ThemedText>
+                                    </View>
+                                  ))}
+                                </View>
+                              );
                             }
-                            return (
-                              <View key={index} style={styles.dataItem}>
-                                <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                                <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
-                                  {displayValue}
-                                </ThemedText>
-                              </View>
+                          } else if (typeof value === 'number') {
+                            // Handle numbers
+                            displayContent = (
+                              <ThemedText style={styles.dataValueFormatted}>
+                                {key.includes('Runtime') ? `${value} minutes` : String(value)}
+                              </ThemedText>
                             );
-                          })
+                          } else {
+                            // Handle strings
+                            displayContent = (
+                              <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
+                                {String(value)}
+                              </ThemedText>
+                            );
+                          }
+                          
+                          return (
+                            <View key={index} style={styles.dataItem}>
+                              <ThemedText style={styles.dataKey}>{key}</ThemedText>
+                              {displayContent}
+                            </View>
+                          );
+                        })
                       ) : (
                         <View style={styles.noDataContainer}>
                           <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
@@ -777,5 +771,40 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 16,
     marginBottom: 20,
+  },
+  arrayContainer: {
+    marginTop: 8,
+  },
+  arrayItem: {
+    marginBottom: 10,
+    paddingVertical: 8,
+  },
+  castItem: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000000',
+    lineHeight: 20,
+  },
+  roleText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: '#666666',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  tag: {
+    backgroundColor: '#00BF6F',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  tagText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
