@@ -414,17 +414,6 @@ export default function ScannerScreen() {
 
           {extractedData && !loading && (
             <View style={styles.dataContainer}>
-              {/* Success Header */}
-              <View style={styles.successHeader}>
-                <View style={styles.successIcon}>
-                  <ThemedText style={styles.checkmark}>✓</ThemedText>
-                </View>
-                <ThemedText style={styles.successTitle}>Extraction Complete</ThemedText>
-                <ThemedText style={styles.successSubtitle}>
-                  Successfully extracted device information
-                </ThemedText>
-              </View>
-
               {/* Extracted Data Card - Display all available data */}
               {extractedData && (
                 <View style={styles.extractedDataCard}>
@@ -450,14 +439,22 @@ export default function ScannerScreen() {
                               String(v).trim() !== '' &&
                               String(v).trim().toUpperCase() !== 'N/A'
                           )
-                          .map(([key, value], index) => (
-                            <View key={index} style={styles.dataItem}>
-                              <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                              <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
-                                {String(value)}
-                              </ThemedText>
-                            </View>
-                          ))
+                          .map(([key, value], index) => {
+                            let displayValue = '';
+                            if (typeof value === 'object' && value !== null) {
+                              displayValue = JSON.stringify(value, null, 2);
+                            } else {
+                              displayValue = String(value);
+                            }
+                            return (
+                              <View key={index} style={styles.dataItem}>
+                                <ThemedText style={styles.dataKey}>{key}</ThemedText>
+                                <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
+                                  {displayValue}
+                                </ThemedText>
+                              </View>
+                            );
+                          })
                       ) : (
                         <View style={styles.noDataContainer}>
                           <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
