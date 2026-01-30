@@ -432,6 +432,10 @@ export default function ScannerScreen() {
                     <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
                   </View>
                   <View style={styles.extractedDataContent}>
+                    {/* Debug: Show if extractedData exists */}
+                    {console.log('DEBUG: extractedData.extractedData =', extractedData.extractedData)}
+                    {console.log('DEBUG: normalizeDisplayEntries result =', normalizeDisplayEntries(extractedData.extractedData))}
+                    
                     {/* Try to display extractedData first */}
                     {extractedData.extractedData && typeof extractedData.extractedData === 'object' ? (
                       normalizeDisplayEntries(extractedData.extractedData).length > 0 ? (
@@ -446,16 +450,26 @@ export default function ScannerScreen() {
                           .map(([key, value], index) => (
                             <View key={index} style={styles.dataItem}>
                               <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                              <ThemedText style={styles.dataValueFormatted} numberOfLines={4}>
-                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                              <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
+                                {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                               </ThemedText>
                             </View>
                           ))
                       ) : (
-                        <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
+                        <View style={styles.noDataContainer}>
+                          <ThemedText style={styles.noDataText}>No data extracted from response</ThemedText>
+                          <ThemedText style={styles.debugText}>
+                            Response structure: {JSON.stringify(Object.keys(extractedData.extractedData || {})).substring(0, 100)}
+                          </ThemedText>
+                        </View>
                       )
                     ) : (
-                      <ThemedText style={styles.noDataText}>No data available</ThemedText>
+                      <View style={styles.noDataContainer}>
+                        <ThemedText style={styles.noDataText}>No extracted data object</ThemedText>
+                        <ThemedText style={styles.debugText}>
+                          Available keys: {JSON.stringify(Object.keys(extractedData || {})).substring(0, 100)}
+                        </ThemedText>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -652,8 +666,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   extractedCardHeader: {
-    backgroundColor: 'linear-gradient(135deg, #00BF6F 0%, #00A86B 100%)',
-    paddingVertical: 12,
+    backgroundColor: '#00BF6F',
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
@@ -661,26 +675,30 @@ const styles = StyleSheet.create({
   extractedCardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#00BF6F',
+    color: '#ffffff',
   },
   extractedDataContent: {
     padding: 16,
+    backgroundColor: '#ffffff',
   },
   dataItem: {
-    marginBottom: 16,
+    marginBottom: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
   },
   dataKey: {
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textMuted,
+    fontWeight: '700',
+    color: '#666666',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
   dataValueFormatted: {
     fontSize: 15,
     fontWeight: '500',
-    color: COLORS.text,
+    color: '#000000',
     lineHeight: 22,
   },
   cardRow: {
@@ -770,9 +788,19 @@ const styles = StyleSheet.create({
   noDataText: {
     fontSize: 14,
     fontStyle: 'italic',
-    color: COLORS.textMuted,
+    color: '#999999',
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  noDataContainer: {
+    paddingVertical: 20,
+  },
+  debugText: {
+    fontSize: 11,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 8,
+    fontFamily: 'monospace',
   },
   actionButtons: {
     marginTop: 20,
