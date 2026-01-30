@@ -83,6 +83,42 @@ export default function ScannerScreen() {
     }
   };
 
+  const uploadImage = async (blob: Blob, index: number) => {
+    // Upload to Zentel AI API using Basic Auth
+    try {
+      const form = new FormData();
+      form.append('imageType', 'Settings Page');
+      form.append('receipt', blob, `capture-${index + 1}.png`);
+      form.append('context_user', 'jeevan');
+
+      // Basic auth header
+      const username = 'tektech';
+      const password = 'Zx#Pq!8Mv@3R';
+      const basic = btoa(`${username}:${password}`);
+
+      const res = await fetch('https://api.zentelai.app/process-image-7', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${basic}`,
+        },
+        body: form,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(
+          `Upload failed: ${res.status} ${res.statusText} ${text}`
+        );
+      }
+
+      const json = await res.json();
+      return json;
+    } catch (err) {
+      console.warn('Upload to Zentel AI failed', err);
+      throw err;
+    }
+  };
+
   const sendImageToApi = async () => {
     if (!capturedImage) {
       Alert.alert('No image', 'Capture or pick an image first.');
@@ -91,101 +127,39 @@ export default function ScannerScreen() {
 
     setLoading(true);
     try {
+      // Convert base64 to Blob
       const base64Data = capturedImageBase64
         ? capturedImageBase64
         : await convertUriToBase64(capturedImage);
 
-      // Use Gemini API with hardcoded key
-      const geminiKey = 'AIzaSyDSD2fpsXpk-RVbV2CPEStxvNqDcUH8wtQ';
-      if (geminiKey) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
-
-        const body = {
-          contents: [
-            {
-              parts: [
-                {
-                  text:
-                    'identify and tell more data  about the image . Return JSON with fields: text, labels (array), confidence (0-1). If unsure, estimate.',
-                },
-                {
-                  inline_data: {
-                    mime_type: 'image/jpeg',
-                    data: base64Data,
-                  },
-                },
-              ],
-            },
-          ],
-        };
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Gemini error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        const modelText = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-        let parsed: ExtractedData;
-        try {
-          parsed = JSON.parse(modelText);
-        } catch (jsonError) {
-          parsed = {
-            text: modelText,
-            message: 'Parsed as plain text because JSON parsing failed.',
-          };
-        }
-
-        setExtractedData(parsed);
-        return;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
       }
+      const blob = new Blob([bytes], { type: 'image/png' });
 
-      // Free fallback: OCR.Space demo key (subject to rate limits). Use EXPO_PUBLIC_OCR_API_KEY to override.
-      const ocrKey = process.env.EXPO_PUBLIC_OCR_API_KEY || 'helloworld';
-      const formData = new FormData();
-      formData.append('apikey', ocrKey);
-      formData.append('base64Image', `data:image/jpeg;base64,${base64Data}`);
-      formData.append('language', 'eng');
-      formData.append('isOverlayRequired', 'false');
+      // Upload to Zentel AI API
+      const result = await uploadImage(blob, 0);
 
-      const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
-        method: 'POST',
-        body: formData,
-      });
+      // Extract and format the response
+      const extractedInfo: ExtractedData = {
+        text: result?.extracted_text || result?.text || 'No text extracted',
+        confidence: result?.confidence || 0.8,
+        labels: result?.labels || result?.categories || [],
+        ...result,
+      };
 
-      if (!ocrResponse.ok) {
-        throw new Error(`OCR error: ${ocrResponse.status}`);
-      }
-
-      const ocrResult = await ocrResponse.json();
-      const parsedText =
-        ocrResult?.ParsedResults?.[0]?.ParsedText?.trim() || 'No text found.';
-
-      setExtractedData({
-        text: parsedText,
-        labels: ['ocr'],
-        confidence: 0.5,
-        message: ocrKey === 'helloworld'
-          ? 'Using free demo OCR key (rate limited). Add EXPO_PUBLIC_OCR_API_KEY for more reliable results.'
-          : 'OCR extracted text.',
-      });
+      setExtractedData(extractedInfo);
     } catch (error) {
       console.error('API error:', error);
-      Alert.alert('Error', 'Failed to process image. Check API key and connectivity.');
+      Alert.alert('Error', 'Failed to process image. Please try again.');
       
       setExtractedData({
-        text: 'Sample extracted text from image',
-        confidence: 0.95,
-        labels: ['document', 'text', 'scan'],
-        message: 'API endpoint not configured. This is demo data.',
+        text: 'Failed to extract data from image',
+        confidence: 0,
+        labels: ['error'],
+        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     } finally {
       setLoading(false);
