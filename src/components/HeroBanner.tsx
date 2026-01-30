@@ -112,8 +112,6 @@ const HeroItem = memo(({ movie }: { movie: Movie }) => {
   );
 });
 
-import { TouchableOpacity } from "react-native";
-
 export const HeroBanner = memo(
   ({ movies, loading = false }: HeroBannerProps) => {
     const [activeIndex, setActiveIndex] = useState(0);

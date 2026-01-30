@@ -4,8 +4,6 @@
  * Fallback: Static Mock Data
  */
 
-import axios from 'axios';
-
 // ============ Configuration ============
 
 // Use API key from environment (.env -> EXPO_PUBLIC_TMDB_API_KEY)
@@ -16,14 +14,33 @@ if (!API_KEY) {
     console.warn('[MatrixFlix] Missing EXPO_PUBLIC_TMDB_API_KEY in environment.');
 }
 
-const api = axios.create({
-    baseURL: BASE_URL,
-    timeout: 5000, // 5 second timeout
-    params: {
-        api_key: API_KEY,
-        language: 'en-US',
+// Helper function to build URLs with default params
+const buildUrl = (endpoint: string, params?: Record<string, any>) => {
+    const url = new URL(`${BASE_URL}${endpoint}`);
+    url.searchParams.append('api_key', API_KEY);
+    url.searchParams.append('language', 'en-US');
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.append(key, String(value));
+        });
     }
-});
+    return url.toString();
+};
+
+// Fetch wrapper with timeout
+const fetchWithTimeout = async (url: string, timeout = 5000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+};
 
 // ============ Type Definitions ============
 
@@ -72,46 +89,46 @@ export interface PaginatedResponse<T> { page: number; results: T[]; total_pages:
 // ============ Endpoints ============
 
 export const getTrending = async (time: 'day' | 'week' = 'day', page = 1) =>
-    (await api.get(`/trending/movie/${time}`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/trending/movie/${time}`, { page }));
 
 export const getPopular = async (page = 1) =>
-    (await api.get(`/movie/popular`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/movie/popular`, { page }));
 
 export const getTopRated = async (page = 1) =>
-    (await api.get(`/movie/top_rated`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/movie/top_rated`, { page }));
 
 export const getUpcoming = async (page = 1) =>
-    (await api.get(`/movie/upcoming`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/movie/upcoming`, { page }));
 
 export const getMovieDetails = async (id: number) =>
-    (await api.get(`/movie/${id}`)).data;
+    fetchWithTimeout(buildUrl(`/movie/${id}`));
 
 export const getMovieVideos = async (id: number) =>
-    (await api.get(`/movie/${id}/videos`)).data;
+    fetchWithTimeout(buildUrl(`/movie/${id}/videos`));
 
 export const getMovieCredits = async (id: number) =>
-    (await api.get(`/movie/${id}/credits`)).data;
+    fetchWithTimeout(buildUrl(`/movie/${id}/credits`));
 
 export const getSimilarMovies = async (id: number, page = 1) =>
-    (await api.get(`/movie/${id}/similar`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/movie/${id}/similar`, { page }));
 
 export const searchMovies = async (query: string, page = 1) => {
     if (!query.trim()) return { page: 1, results: [], total_pages: 1, total_results: 0 };
-    const res = await api.get(`/search/multi`, { params: { query, page } });
-    res.data.results = res.data.results
+    const data = await fetchWithTimeout(buildUrl(`/search/multi`, { query, page }));
+    data.results = data.results
         .map((m: any) => ({ ...m, title: m.title || m.name }))
         .filter((m: any) => m.media_type !== 'person');
-    return res.data;
+    return data;
 };
 
 export const getGenres = async () =>
-    (await api.get(`/genre/movie/list`)).data;
+    fetchWithTimeout(buildUrl(`/genre/movie/list`));
 
 export const discoverByGenre = async (genreId: number, page = 1) =>
-    (await api.get(`/discover/movie`, { params: { with_genres: genreId, page } })).data;
+    fetchWithTimeout(buildUrl(`/discover/movie`, { with_genres: genreId, page }));
 
 export const getRecommendations = async (id: number, page = 1) =>
-    (await api.get(`/movie/${id}/recommendations`, { params: { page } })).data;
+    fetchWithTimeout(buildUrl(`/movie/${id}/recommendations`, { page }));
 
 export const tmdbApi = {
     getTrending, getPopular, getTopRated, getUpcoming,
