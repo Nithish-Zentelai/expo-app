@@ -5,9 +5,11 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
+    Image,
     Linking,
     Platform,
     Pressable,
@@ -38,21 +40,53 @@ interface MenuItemProps {
     delay?: number;
 }
 
+interface Auth0User {
+    sub: string;
+    name?: string;
+    email?: string;
+    picture?: string;
+    [key: string]: any;
+}
+
 // ============ Profile Avatar Component ============
 
-const ProfileAvatar = () => (
-    <Animated.View style={styles.avatarContainer} entering={FadeIn.delay(100)}>
-        <LinearGradient
-            colors={[COLORS.primary, COLORS.primaryDark]}
-            style={styles.avatarGradient}
-        >
-            <Text style={styles.avatarText}>U</Text>
-        </LinearGradient>
-        <View style={styles.editBadge}>
-            <Ionicons name="pencil" size={12} color={COLORS.text} />
-        </View>
-    </Animated.View>
-);
+interface ProfileAvatarProps {
+    userPicture?: string;
+    userName?: string;
+}
+
+const ProfileAvatar = ({ userPicture, userName }: ProfileAvatarProps) => {
+    // Extract initials from user name
+    const initials = userName
+        ? userName
+            .split(' ')
+            .map((n) => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2)
+        : 'U';
+
+    return (
+        <Animated.View style={styles.avatarContainer} entering={FadeIn.delay(100)}>
+            {userPicture ? (
+                <Image
+                    source={{ uri: userPicture }}
+                    style={styles.avatarImage}
+                />
+            ) : (
+                <LinearGradient
+                    colors={[COLORS.primary, COLORS.primaryDark]}
+                    style={styles.avatarGradient}
+                >
+                    <Text style={styles.avatarText}>{initials}</Text>
+                </LinearGradient>
+            )}
+            <View style={styles.editBadge}>
+                <Ionicons name="pencil" size={12} color={COLORS.text} />
+            </View>
+        </Animated.View>
+    );
+};
 
 // ============ Menu Item Component ============
 
@@ -120,7 +154,29 @@ const SectionHeader = ({ title, delay = 0 }: { title: string; delay?: number }) 
 // ============ Profile Screen Component ============
 
 export default function ProfileScreen() {
-    // Handle menu item presses
+    const [user, setUser] = useState<Auth0User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch user from Auth0
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                // Try to get user from secure storage
+                const userJSON = await SecureStore.getItemAsync('auth0_user');
+                if (userJSON) {
+                    const userData = JSON.parse(userJSON);
+                    setUser(userData);
+                }
+            } catch (error) {
+                console.error('Error fetching user:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchUser();
+    }, []);
+
     const handleNotifications = useCallback(() => {
         Alert.alert('Notifications', 'Notification settings coming soon!');
     }, []);
@@ -178,10 +234,14 @@ export default function ProfileScreen() {
 
                 {/* Profile Card */}
                 <Animated.View style={styles.profileCard} entering={FadeInDown.delay(100)}>
-                    <ProfileAvatar />
+                    <ProfileAvatar userPicture={user?.picture} userName={user?.name} />
                     <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>Guest User</Text>
-                        <Text style={styles.profileEmail}>Sign in to unlock all features</Text>
+                        <Text style={styles.profileName}>
+                            {user?.name || 'Guest User'}
+                        </Text>
+                        <Text style={styles.profileEmail}>
+                            {user?.email || 'Sign in to unlock all features'}
+                        </Text>
                     </View>
                 </Animated.View>
 
@@ -328,6 +388,11 @@ const styles = StyleSheet.create({
     },
     avatarContainer: {
         position: 'relative',
+    },
+    avatarImage: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
     },
     avatarGradient: {
         width: 64,
