@@ -358,13 +358,6 @@ export default function ScannerScreen() {
           {!loading && (
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.tint }]}
-                onPress={sendImageToApi}
-              >
-                <Text style={styles.buttonText}>Proceed</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 style={[styles.button, { backgroundColor: colors.tabIconDefault }]}
                 onPress={resetScanner}
               >
@@ -382,89 +375,134 @@ export default function ScannerScreen() {
 
           {extractedData && !loading && (
             <View style={styles.dataContainer}>
-              {/* Extracted Data Card - Display all available data */}
+              {/* OTT Platform Style View */}
               {extractedData && (
-                <View style={styles.extractedDataCard}>
-                  <View style={styles.extractedCardHeader}>
-                    <ThemedText style={styles.extractedCardTitle}>
-                      {extractedData.title || 'Movie Information'}
-                    </ThemedText>
+                <ScrollView style={styles.ottContainer}>
+                  {/* Backdrop/Poster Section */}
+                  <View style={styles.backdropSection}>
+                    <Image
+                      source={{ uri: capturedImage }}
+                      style={styles.backdropImage}
+                    />
+                    <View style={styles.gradientOverlay} />
+                    <TouchableOpacity style={styles.playButtonOverlay}>
+                      <Text style={styles.playIcon}>▶</Text>
+                    </TouchableOpacity>
                   </View>
-                  <View style={styles.extractedDataContent}>
-                    {extractedData.extractedData && typeof extractedData.extractedData === 'object' ? (
-                      normalizeDisplayEntries(extractedData.extractedData).length > 0 ? (
-                        normalizeDisplayEntries(extractedData.extractedData).map(([key, value], index) => {
-                          let displayContent = null;
-                          
-                          // Handle different data types
-                          if (Array.isArray(value)) {
-                            // Handle arrays (cast, genres, writers, etc.)
-                            if (value.length === 0) {
-                              displayContent = <ThemedText style={styles.dataValueFormatted}>—</ThemedText>;
-                            } else if (typeof value[0] === 'object' && value[0] !== null) {
-                              // Array of objects (cast)
-                              displayContent = (
-                                <View style={styles.arrayContainer}>
-                                  {value.map((item: any, idx: number) => (
-                                    <View key={idx} style={styles.arrayItem}>
-                                      {(item.actor || item.role) ? (
-                                        <ThemedText style={styles.castItem}>
-                                          {item.actor || 'Unknown'} <ThemedText style={styles.roleText}>as</ThemedText> {item.role || 'Unknown'}
-                                        </ThemedText>
-                                      ) : (
-                                        <ThemedText style={styles.dataValueFormatted}>{JSON.stringify(item)}</ThemedText>
-                                      )}
-                                    </View>
-                                  ))}
-                                </View>
-                              );
-                            } else {
-                              // Array of strings (genres, writers, etc.)
-                              displayContent = (
-                                <View style={styles.tagsContainer}>
-                                  {value.map((item: any, idx: number) => (
-                                    <View key={idx} style={styles.tag}>
-                                      <ThemedText style={styles.tagText}>{String(item)}</ThemedText>
-                                    </View>
-                                  ))}
-                                </View>
-                              );
-                            }
-                          } else if (typeof value === 'number') {
-                            // Handle numbers
-                            displayContent = (
-                              <ThemedText style={styles.dataValueFormatted}>
-                                {key.includes('Runtime') ? `${value} minutes` : String(value)}
-                              </ThemedText>
-                            );
-                          } else {
-                            // Handle strings
-                            displayContent = (
-                              <ThemedText style={styles.dataValueFormatted} numberOfLines={5}>
-                                {String(value)}
-                              </ThemedText>
-                            );
-                          }
-                          
-                          return (
-                            <View key={index} style={styles.dataItem}>
-                              <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                              {displayContent}
-                            </View>
-                          );
-                        })
-                      ) : (
-                        <View style={styles.noDataContainer}>
-                          <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
-                        </View>
-                      )
-                    ) : (
-                      <View style={styles.noDataContainer}>
-                        <ThemedText style={styles.noDataText}>No extracted data found</ThemedText>
+
+                  {/* Movie Info Section */}
+                  <View style={styles.movieInfoSection}>
+                    <ThemedText style={styles.movieTitle}>
+                      {extractedData.title || 'Movie Title'}
+                    </ThemedText>
+                    
+                    {extractedData.original_title && (
+                      <ThemedText style={styles.originalTitle}>
+                        {extractedData.original_title}
+                      </ThemedText>
+                    )}
+
+                    {/* Metadata Row */}
+                    <View style={styles.metadataRow}>
+                      {extractedData.year && (
+                        <ThemedText style={styles.metadataItem}>
+                          {extractedData.year}
+                        </ThemedText>
+                      )}
+                      {extractedData.runtime_minutes && (
+                        <>
+                          <ThemedText style={styles.metadataItem}>•</ThemedText>
+                          <ThemedText style={styles.metadataItem}>
+                            {extractedData.runtime_minutes}m
+                          </ThemedText>
+                        </>
+                      )}
+                    </View>
+
+                    {/* Genres */}
+                    {extractedData.genres && Array.isArray(extractedData.genres) && extractedData.genres.length > 0 && (
+                      <View style={styles.genresRow}>
+                        {extractedData.genres.slice(0, 3).map((genre: string, idx: number) => (
+                          <ThemedText key={idx} style={styles.genreTag}>{genre}</ThemedText>
+                        ))}
                       </View>
                     )}
                   </View>
-                </View>
+
+                  {/* About Section */}
+                  {extractedData.description && (
+                    <View style={styles.sectionContainer}>
+                      <ThemedText style={styles.sectionTitle}>About</ThemedText>
+                      <ThemedText style={styles.descriptionText}>
+                        {extractedData.description}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  {/* Director */}
+                  {extractedData.director && (
+                    <View style={styles.sectionContainer}>
+                      <ThemedText style={styles.sectionTitle}>Director</ThemedText>
+                      <ThemedText style={styles.sectionValue}>
+                        {extractedData.director}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  {/* Cast Section */}
+                  {extractedData.cast && Array.isArray(extractedData.cast) && extractedData.cast.length > 0 && (
+                    <View style={styles.sectionContainer}>
+                      <ThemedText style={styles.sectionTitle}>Cast</ThemedText>
+                      <View style={styles.castHorizontalScroll}>
+                        <ScrollView 
+                          horizontal 
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.castScrollView}
+                        >
+                          {extractedData.cast.map((member: any, idx: number) => (
+                            <View key={idx} style={styles.castMemberContainer}>
+                              <View style={styles.castAvatarPlaceholder}>
+                                <Text style={styles.avatarInitial}>
+                                  {member.actor ? member.actor.charAt(0).toUpperCase() : '?'}
+                                </Text>
+                              </View>
+                              <ThemedText style={styles.castMemberName} numberOfLines={1}>
+                                {member.actor || 'Unknown'}
+                              </ThemedText>
+                              <ThemedText style={styles.castMemberRole} numberOfLines={1}>
+                                {member.role || 'Role'}
+                              </ThemedText>
+                            </View>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Additional Info */}
+                  <View style={styles.additionalInfoContainer}>
+                    {extractedData.language && (
+                      <View style={styles.infoRow}>
+                        <ThemedText style={styles.infoLabel}>Language</ThemedText>
+                        <ThemedText style={styles.infoValue}>{extractedData.language}</ThemedText>
+                      </View>
+                    )}
+                    {extractedData.country && (
+                      <View style={styles.infoRow}>
+                        <ThemedText style={styles.infoLabel}>Country</ThemedText>
+                        <ThemedText style={styles.infoValue}>{extractedData.country}</ThemedText>
+                      </View>
+                    )}
+                    {extractedData.release_date && (
+                      <View style={styles.infoRow}>
+                        <ThemedText style={styles.infoLabel}>Release Date</ThemedText>
+                        <ThemedText style={styles.infoValue}>{extractedData.release_date}</ThemedText>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.bottomSpacer} />
+                </ScrollView>
               )}
             </View>
           )}
@@ -474,7 +512,7 @@ export default function ScannerScreen() {
               style={[styles.button, { backgroundColor: colors.tint }]}
               onPress={resetScanner}
             >
-              <Text style={styles.buttonText}> Scan Again</Text>
+              <Text style={styles.buttonText}>Scan Again</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -810,5 +848,167 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  // OTT Platform Styles
+  ottContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+  },
+  backdropSection: {
+    width: '100%',
+    height: 300,
+    position: 'relative',
+    marginBottom: 20,
+  },
+  backdropImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  gradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  playButtonOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -40,
+    marginTop: -40,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 191, 111, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIcon: {
+    fontSize: 36,
+    color: '#ffffff',
+    marginLeft: 4,
+  },
+  movieInfoSection: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  movieTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  originalTitle: {
+    fontSize: 14,
+    color: '#999999',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  metadataItem: {
+    fontSize: 14,
+    color: '#cccccc',
+    fontWeight: '500',
+  },
+  genresRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  genreTag: {
+    fontSize: 12,
+    color: '#cccccc',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  sectionContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: '#cccccc',
+    lineHeight: 20,
+  },
+  sectionValue: {
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  castHorizontalScroll: {
+    marginBottom: 8,
+  },
+  castScrollView: {
+    flexGrow: 0,
+  },
+  castMemberContainer: {
+    alignItems: 'center',
+    marginRight: 16,
+    width: 90,
+  },
+  castAvatarPlaceholder: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#00BF6F',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  avatarInitial: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  castMemberName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  castMemberRole: {
+    fontSize: 11,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  additionalInfoContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 16,
+    borderRadius: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: '#999999',
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  bottomSpacer: {
+    height: 40,
   },
 });
