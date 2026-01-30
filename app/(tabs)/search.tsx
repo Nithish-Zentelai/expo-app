@@ -1,3 +1,9 @@
+/**
+ * Search Screen
+ * Animated search interface with debounced results and related suggestions
+ * Uses TMDB search for real movie data
+ */
+ 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,21 +71,12 @@ export default function SearchScreen() {
             recognition.onresult = (event: any) => {
                 const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
                 if (transcript.trim()) {
-                    console.log('Voice transcript:', transcript);
                     search(transcript);
                     syncInputText(transcript);
                 }
-                setIsListening(false);
             };
-            recognition.onend = () => {
-                console.log('Speech ended');
-                setIsListening(false);
-            };
-            recognition.onerror = (event: any) => {
-                console.error('Web speech error:', event.error);
-                setIsListening(false);
-                Alert.alert('Voice Error', 'Could not recognize speech. Please try again.');
-            };
+            recognition.onend = () => setIsListening(false);
+            recognition.onerror = () => setIsListening(false);
  
             recognitionRef.current = recognition;
             setIsVoiceSupported(true);
@@ -98,20 +95,17 @@ export default function SearchScreen() {
         voiceModule.onSpeechResults = (event: { value?: string[] }) => {
             const transcript = event?.value?.[0] ?? '';
             if (transcript.trim()) {
-                console.log('Voice transcript:', transcript);
                 search(transcript);
                 syncInputText(transcript);
-                setIsListening(false);
             }
         };
-        voiceModule.onSpeechEnd = () => {
-            console.log('Speech ended');
+        voiceModule.onSpeechEnd = () => setIsListening(false);
+        voiceModule.onSpeechError = (event: { error?: { message?: string; code?: string | number } }) => {
             setIsListening(false);
-        };
-        voiceModule.onSpeechError = (error: any) => {
-            console.error('Voice error:', error);
-            setIsListening(false);
-            Alert.alert('Voice Error', 'Could not recognize speech. Please try again.');
+            const message = event?.error?.message?.toLowerCase() ?? '';
+            if (message.includes('not available') || message.includes('not supported')) {
+                setIsVoiceSupported(false);
+            }
         };
  
         const checkAvailability = async () => {
@@ -132,18 +126,9 @@ export default function SearchScreen() {
  
     // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
-        try {
-            const input = inputRef.current as any;
-            if (!input) return;
-            
-            if (typeof input.setNativeProps === 'function') {
-                input.setNativeProps({ text });
-                console.log('Updated input via setNativeProps:', text);
-            } else {
-                console.warn('setNativeProps not available on this platform');
-            }
-        } catch (error) {
-            console.error('Error updating input text:', error);
+        const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
+        if (input && typeof input.setNativeProps === 'function') {
+            input.setNativeProps({ text });
         }
     };
  
@@ -185,6 +170,18 @@ export default function SearchScreen() {
  
     // Mic button toggles listening state
     const handleVoicePress = async () => {
+        if (!isVoiceSupported) {
+            if (Platform.OS === 'web') {
+                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
+            } else {
+                Alert.alert(
+                    'Voice search unavailable',
+                    'Install/enable Speech Services by Google, set it as the default voice input, and allow microphone access.'
+                );
+            }
+            return;
+        }
+ 
         if (Platform.OS === 'web') {
             if (isListening) {
                 recognitionRef.current?.stop?.();
@@ -192,46 +189,32 @@ export default function SearchScreen() {
                 return;
             }
             try {
-                if (!recognitionRef.current) {
-                    Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
-                    return;
-                }
                 recognitionRef.current?.start?.();
                 setIsListening(true);
-            } catch (error) {
-                console.error('Web voice error:', error);
+            } catch {
                 setIsListening(false);
-                Alert.alert('Voice Error', 'Failed to start voice recognition.');
             }
             return;
         }
-
-        // Native platform
-        if (!voiceModule) {
-            Alert.alert('Voice search unavailable', 'Speech recognition is not available on this device.');
-            return;
-        }
-
+ 
         try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
-                Alert.alert('Microphone permission denied', 'Enable microphone access in settings to use voice search.');
+                Alert.alert('Microphone permission denied', 'Enable microphone access to use voice search.');
                 return;
             }
-
+ 
             if (isListening) {
                 await voiceModule.stop();
                 setIsListening(false);
                 return;
             }
-
-            console.log('Starting voice recognition...');
+ 
             await voiceModule.start('en-US');
             setIsListening(true);
-        } catch (error) {
-            console.error('Native voice error:', error);
+        } catch {
             setIsListening(false);
-            Alert.alert('Voice Error', 'Could not start voice recognition. Please try again.');
+            setIsVoiceSupported(false);
         }
     };
  
@@ -241,6 +224,36 @@ export default function SearchScreen() {
         const resultIds = results?.map(r => r.id) || [];
         return homeData.trending.filter(m => !resultIds.includes(m.id)).slice(0, 6);
     }, [homeData.trending, results]);
+ 
+    // Local fallback matches from home lists (helps when TMDB returns empty).
+    const localMatches = useMemo(() => {
+        const searchText = query.trim().toLowerCase();
+        if (!searchText) return [];
+        const pool = [
+            ...homeData.trending,
+            ...homeData.popular,
+            ...homeData.topRated,
+            ...homeData.upcoming,
+        ];
+        const seen = new Set<number>();
+        return pool.filter((movie) => {
+            if (seen.has(movie.id)) return false;
+            const title = (movie.title || movie.name || movie.original_title || '').toLowerCase();
+            if (!title.includes(searchText)) return false;
+            seen.add(movie.id);
+            return true;
+        });
+    }, [homeData, query]);
+ 
+    const combinedResults = useMemo(() => {
+        if (!query.trim()) return results || [];
+        const merged = [...(results || [])];
+        const ids = new Set(merged.map((m) => m.id));
+        localMatches.forEach((m) => {
+            if (!ids.has(m.id)) merged.push(m);
+        });
+        return merged;
+    }, [localMatches, query, results]);
  
     const renderItem = useCallback(({ item, index }: { item: Movie, index: number }) => (
         <Animated.View
@@ -299,16 +312,23 @@ export default function SearchScreen() {
                         autoCorrect={false}
                         clearButtonMode="while-editing"
                     />
-                    {/* Microphone always visible */}
                     <TouchableOpacity
                         onPress={handleVoicePress}
                         style={styles.voiceButton}
                         accessibilityLabel="Voice search"
                     >
                         <Ionicons
-                            name={isListening ? 'mic' : 'mic-outline'}
+                            name={
+                                isVoiceSupported
+                                    ? (isListening ? 'mic' : 'mic-outline')
+                                    : 'mic-off'
+                            }
                             size={20}
-                            color={isListening ? COLORS.accent : COLORS.textSecondary}
+                            color={
+                                isVoiceSupported
+                                    ? (isListening ? COLORS.accent : COLORS.textSecondary)
+                                    : COLORS.textMuted
+                            }
                         />
                     </TouchableOpacity>
                     {query.length > 0 && Platform.OS !== 'ios' && (
@@ -360,7 +380,7 @@ export default function SearchScreen() {
  
             {/* Results Grid */}
             <FlatList
-                data={results || []}
+                data={combinedResults || []}
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id.toString()}
                 numColumns={3}
@@ -371,7 +391,7 @@ export default function SearchScreen() {
                 ListHeaderComponent={
                     query.trim().length > 0 ? (
                         <Text style={styles.resultsTitle}>
-                            {(results && results.length > 0) ? `Results for "${query}"` : null}
+                            {(combinedResults && combinedResults.length > 0) ? `Results for "${query}"` : null}
                         </Text>
                     ) : null
                 }
@@ -389,7 +409,7 @@ export default function SearchScreen() {
                                 </View>
                             ))}
                         </View>
-                    ) : (query.trim().length > 0 && (!results || results.length === 0) ? (
+                    ) : (query.trim().length > 0 && (!combinedResults || combinedResults.length === 0) ? (
                         <View style={styles.emptyContainer}>
                             <Text style={styles.emptyText}>No matches for "{query}"</Text>
                         </View>
