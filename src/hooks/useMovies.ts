@@ -13,16 +13,16 @@ import {
     getMovieCredits,
     getMovieDetails,
     getMovieVideos,
-    getMyList,
-    getNowPlaying,
     getPopular,
     getSimilarMovies,
     getTopRated,
     getTrending,
-    getTvShows,
     getUpcoming,
     searchMovies,
 } from '../api/tmdb';
+import { getHomeScreenData as getSupabaseHomeScreenData } from '../api/supabaseApi';
+import type { HomeScreenData as SupabaseHomeScreenData } from '../types/database.types';
+import { mapSupabaseMoviesToTmdb } from '../utils/movie';
 
 // ============ Types ============
 
@@ -109,16 +109,13 @@ export const useMovieList = (
 
 // ============ Specific Movie List Hooks ============
 
-export const useTrendingMovies = (timeWindow: 'day' | 'week' = 'week') => {
+export const useTrendingMovies = (timeWindow: 'day' | 'week' = 'day') => {
     return useMovieList(useCallback((page: number) => getTrending(timeWindow, page), [timeWindow]));
 };
 
 export const usePopularMovies = () => useMovieList(getPopular);
 export const useTopRatedMovies = () => useMovieList(getTopRated);
 export const useUpcomingMovies = () => useMovieList(getUpcoming);
-export const useNowPlayingMovies = () => useMovieList(getNowPlaying);
-export const useTvShows = () => useMovieList(() => getTvShows());
-export const useMyList = () => useMovieList(() => getMyList());
 
 // ============ Movie Details Hook ============
 
@@ -160,7 +157,10 @@ export const useMovieDetails = (movieId: number | null): MovieDetailsState & { r
                 getSimilarMovies(movieId),
             ]);
 
-            const trailer = videosData.results.find(v => v.type === 'Trailer') || videosData.results[0] || null;
+            const trailer = videosData.results.find(v => v.type === 'Trailer' && v.site === 'YouTube')
+                || videosData.results.find(v => v.type === 'Trailer')
+                || videosData.results[0]
+                || null;
 
             if (isMounted.current) {
                 setState({
@@ -271,11 +271,18 @@ interface HomeScreenData {
     popular: Movie[];
     topRated: Movie[];
     upcoming: Movie[];
-    nowPlaying: Movie[];
-    tvShows: Movie[];
-    myList: Movie[];
     heroMovie: Movie | null;
 }
+
+const mapSupabaseHomeToTmdb = (data: SupabaseHomeScreenData): HomeScreenData => {
+    const trending = mapSupabaseMoviesToTmdb(data.trending);
+    const popular = mapSupabaseMoviesToTmdb(data.popular);
+    const topRated = mapSupabaseMoviesToTmdb(data.topRated);
+    const upcoming = mapSupabaseMoviesToTmdb(data.newReleases);
+    const heroMovie = trending[0] || popular[0] || upcoming[0] || null;
+
+    return { trending, popular, topRated, upcoming, heroMovie };
+};
 
 export const useHomeData = (): UseHomeDataState => {
     const [data, setData] = useState<HomeScreenData>({
@@ -283,9 +290,6 @@ export const useHomeData = (): UseHomeDataState => {
         popular: [],
         topRated: [],
         upcoming: [],
-        nowPlaying: [],
-        tvShows: [],
-        myList: [],
         heroMovie: null,
     });
     const [loading, setLoading] = useState(true);
@@ -295,15 +299,13 @@ export const useHomeData = (): UseHomeDataState => {
     const fetchHomeData = useCallback(async () => {
         try {
             setLoading(true);
-            const [trendingRes, popularRes, topRatedRes, upcomingRes, nowPlayingRes, tvRes, myListRes] =
+            setError(null);
+            const [trendingRes, popularRes, topRatedRes, upcomingRes] =
                 await Promise.all([
-                    getTrending('week'),
+                    getTrending('day'),
                     getPopular(),
                     getTopRated(),
                     getUpcoming(),
-                    getNowPlaying(),
-                    getTvShows(),
-                    getMyList(),
                 ]);
 
             if (isMounted.current) {
@@ -312,14 +314,18 @@ export const useHomeData = (): UseHomeDataState => {
                     popular: popularRes.results,
                     topRated: topRatedRes.results,
                     upcoming: upcomingRes.results,
-                    nowPlaying: nowPlayingRes.results,
-                    tvShows: tvRes.results,
-                    myList: myListRes.results,
                     heroMovie: trendingRes.results[0] || null,
                 });
             }
         } catch (err) {
-            if (isMounted.current) setError('Failed to load home data');
+            try {
+                const supabaseData = await getSupabaseHomeScreenData();
+                if (isMounted.current) {
+                    setData(mapSupabaseHomeToTmdb(supabaseData));
+                }
+            } catch (dbErr) {
+                if (isMounted.current) setError('Failed to load home data');
+            }
         } finally {
             if (isMounted.current) setLoading(false);
         }

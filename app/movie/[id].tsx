@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Dimensions,
+    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -19,6 +20,7 @@ import Animated, {
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+import YoutubePlayer from 'react-native-youtube-iframe';
 
 import { FullScreenLoader, MovieRow } from '../../src/components';
 import {
@@ -28,8 +30,14 @@ import {
     FONT_WEIGHTS,
     SPACING,
 } from '../../src/constants/theme';
+import { useMovieDetails } from '../../src/hooks/useMovies';
 import { useSupabaseMovieDetails } from '../../src/hooks/useSupabaseMovies';
-import { Category } from '../../src/types/database.types';
+import { Genre } from '../../src/api/tmdb';
+import { getBackdropUrl, getPosterUrl } from '../../src/utils/image';
+import {
+    mapSupabaseMovieToTmdbDetails,
+    mapSupabaseMoviesToTmdb
+} from '../../src/utils/movie';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 400;
@@ -69,7 +77,7 @@ const BackButton = () => {
 
 // ============ Genre Chip Component ============
 
-const GenreChip = ({ category }: { category: Category }) => (
+const GenreChip = ({ category }: { category: Genre }) => (
     <View style={styles.genreChip}>
         <Text style={styles.genreText}>{category.name}</Text>
     </View>
@@ -186,34 +194,65 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry: () => void
 // ============ Movie Details Screen ============
 
 export default function MovieDetailsScreen() {
-    // Get movie ID from route params (UUID string)
+    // Get movie ID from route params (TMDB numeric string)
     const { id: movieId } = useLocalSearchParams<{ id: string }>();
+    const isDbMovie = Boolean(movieId && movieId.startsWith('db_'));
+    const dbMovieId = isDbMovie ? movieId!.replace('db_', '') : null;
+    const movieIdNumber = !isDbMovie && movieId ? Number(movieId) : null;
 
-    // Fetch movie details using Supabase hook
-    const { movie, similar, loading, error, refetch } = useSupabaseMovieDetails(movieId || null);
+    // Fetch movie details from TMDB
+    const { movie, similar, loading, error, refetch, trailer } = useMovieDetails(
+        Number.isFinite(movieIdNumber) ? movieIdNumber : null
+    );
+    const {
+        movie: dbMovie,
+        similar: dbSimilar,
+        loading: dbLoading,
+        error: dbError,
+        refetch: dbRefetch
+    } = useSupabaseMovieDetails(dbMovieId);
 
-    // Handle play trailer (Not yet available in Supabase, using placeholder)
+    const resolvedMovie = isDbMovie
+        ? (dbMovie ? mapSupabaseMovieToTmdbDetails(dbMovie, dbMovie.categories) : null)
+        : movie;
+    const resolvedSimilar = isDbMovie ? mapSupabaseMoviesToTmdb(dbSimilar) : similar;
+    const resolvedLoading = isDbMovie ? dbLoading : loading;
+    const resolvedError = isDbMovie ? dbError : error;
+    const resolvedRefetch = isDbMovie ? dbRefetch : refetch;
+
+    // Trailer modal state
+    const [showTrailer, setShowTrailer] = useState(false);
+    const trailerKey = isDbMovie
+        ? (dbMovie?.trailer_youtube_id ?? undefined)
+        : (trailer?.site === 'YouTube' ? trailer.key : undefined);
+
+    // Handle play trailer
     const handlePlayTrailer = useCallback(() => {
-        // TODO: Implement trailer linking when available
-        console.log('Play Trailer for:', movie?.title);
-    }, [movie]);
+        if (trailerKey) {
+            setShowTrailer(true);
+        }
+    }, [trailerKey]);
 
     // Handle add to My List
     const handleAddToList = useCallback(() => {
         // TODO: Implement My List functionality
         console.log('Add to My List:', movie?.title);
-    }, [movie]);
+    }, [resolvedMovie]);
 
     // Format duration
     const formattedRuntime = useMemo(() => {
-        if (!movie?.duration) return null;
-        const hours = Math.floor(movie.duration / 60);
-        const minutes = movie.duration % 60;
+        if (!resolvedMovie?.runtime) return null;
+        const hours = Math.floor(resolvedMovie.runtime / 60);
+        const minutes = resolvedMovie.runtime % 60;
         return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    }, [movie?.duration]);
+    }, [resolvedMovie?.runtime]);
+
+    const backdropUrl = getBackdropUrl(resolvedMovie?.backdrop_path ?? resolvedMovie?.poster_path, 'original');
+    const posterUrl = getPosterUrl(resolvedMovie?.poster_path, 'large');
+    const releaseYear = resolvedMovie?.release_date ? resolvedMovie.release_date.split('-')[0] : '—';
 
     // Show loading state
-    if (loading) {
+    if (resolvedLoading) {
         return (
             <View style={styles.container}>
                 <FullScreenLoader message="Loading movie details..." />
@@ -222,11 +261,11 @@ export default function MovieDetailsScreen() {
     }
 
     // Show error state
-    if (error || !movie) {
+    if (resolvedError || !resolvedMovie) {
         return (
             <ErrorState
-                message={error || 'Movie not found'}
-                onRetry={refetch}
+                message={resolvedError || 'Movie not found'}
+                onRetry={resolvedRefetch}
             />
         );
     }
@@ -240,9 +279,9 @@ export default function MovieDetailsScreen() {
             >
                 {/* Backdrop Image */}
                 <View style={styles.backdropContainer}>
-                    {movie.backdrop_url && (
+                    {backdropUrl && (
                         <Image
-                            source={{ uri: movie.backdrop_url }}
+                            source={{ uri: backdropUrl }}
                             style={styles.backdropImage}
                             contentFit="cover"
                             transition={500}
@@ -264,31 +303,25 @@ export default function MovieDetailsScreen() {
                 <View style={styles.infoSection}>
                     {/* Poster and Title Row */}
                     <Animated.View style={styles.titleRow} entering={FadeInUp.delay(100)}>
-                        {movie.poster_url && (
+                        {posterUrl && (
                             <Image
-                                source={{ uri: movie.poster_url }}
+                                source={{ uri: posterUrl }}
                                 style={styles.poster}
                                 contentFit="cover"
                                 transition={300}
                             />
                         )}
                         <View style={styles.titleContainer}>
-                            <Text style={styles.title}>{movie.title}</Text>
+                            <Text style={styles.title}>{resolvedMovie.title}</Text>
 
                             {/* Meta Info */}
                             <View style={styles.metaRow}>
                                 <View style={styles.ratingContainer}>
                                     <Ionicons name="star" size={16} color={COLORS.accentGold} />
-                                    <Text style={styles.rating}>{movie.rating.toFixed(1)}</Text>
+                                    <Text style={styles.rating}>{(resolvedMovie.vote_average || 0).toFixed(1)}</Text>
                                 </View>
-                                {movie.release_year && (
-                                    <>
-                                        <Text style={styles.metaSeparator}>•</Text>
-                                        <Text style={styles.year}>
-                                            {movie.release_year}
-                                        </Text>
-                                    </>
-                                )}
+                                <Text style={styles.metaSeparator}>•</Text>
+                                <Text style={styles.year}>{releaseYear}</Text>
                                 {formattedRuntime && (
                                     <>
                                         <Text style={styles.metaSeparator}>•</Text>
@@ -299,7 +332,7 @@ export default function MovieDetailsScreen() {
 
                             {/* Genres / Categories */}
                             <View style={styles.genresContainer}>
-                                {movie.categories?.map((category) => (
+                                {resolvedMovie.genres?.map((category) => (
                                     <GenreChip key={category.id} category={category} />
                                 ))}
                             </View>
@@ -310,10 +343,10 @@ export default function MovieDetailsScreen() {
                     <Animated.View style={styles.actionsRow} entering={FadeInUp.delay(200)}>
                         <ActionButton
                             icon="play"
-                            label="No Trailer"
+                            label={trailerKey ? 'Play Trailer' : 'No Trailer'}
                             onPress={handlePlayTrailer}
                             primary
-                            disabled
+                            disabled={!trailerKey}
                         />
                         <ActionButton
                             icon="add"
@@ -325,11 +358,12 @@ export default function MovieDetailsScreen() {
                     {/* Overview */}
                     <Animated.View entering={FadeInDown.delay(300)}>
                         <Text style={styles.sectionTitle}>Overview</Text>
-                        <Text style={styles.overview}>{movie.description || 'No description available.'}</Text>
+                        <Text style={styles.overview}>{resolvedMovie.overview || 'No overview available.'}</Text>
                     </Animated.View>
 
                     {/* Additional Info */}
                     <Animated.View style={styles.additionalInfo} entering={FadeInDown.delay(350)}>
+                        <InfoRow icon="calendar-outline" label="Release Date" value={resolvedMovie.release_date || '—'} />
                         <InfoRow icon="film-outline" label="Format" value="4K Ultra HD" />
                         <InfoRow icon="information-circle-outline" label="Availability" value="Streaming Now" />
                     </Animated.View>
@@ -344,11 +378,11 @@ export default function MovieDetailsScreen() {
                 </View>
 
                 {/* Similar Movies */}
-                {similar.length > 0 && (
+                {resolvedSimilar.length > 0 && (
                     <Animated.View entering={FadeInDown.delay(500)}>
                         <MovieRow
                             title="More Like This"
-                            movies={similar}
+                            movies={resolvedSimilar}
                         />
                     </Animated.View>
                 )}
@@ -363,6 +397,41 @@ export default function MovieDetailsScreen() {
                 {/* Bottom Spacer */}
                 <View style={styles.bottomSpacer} />
             </ScrollView>
+
+            {/* Trailer Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={showTrailer}
+                onRequestClose={() => setShowTrailer(false)}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Trailer</Text>
+                            <Pressable
+                                onPress={() => setShowTrailer(false)}
+                                style={styles.closeButton}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.text} />
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.videoContainer}>
+                            <YoutubePlayer
+                                height={240}
+                                play={true}
+                                videoId={trailerKey}
+                                onChangeState={(state: string) => {
+                                    if (state === 'ended') {
+                                        setShowTrailer(false);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -620,5 +689,41 @@ const styles = StyleSheet.create({
         color: COLORS.text,
         fontSize: FONT_SIZES.md,
         fontWeight: FONT_WEIGHTS.bold,
+    },
+
+    // Modal Styles
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    },
+    modalContent: {
+        width: '100%',
+        backgroundColor: COLORS.backgroundSecondary,
+        borderTopLeftRadius: BORDER_RADIUS.lg,
+        borderTopRightRadius: BORDER_RADIUS.lg,
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: SPACING.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    modalTitle: {
+        color: COLORS.text,
+        fontSize: FONT_SIZES.lg,
+        fontWeight: FONT_WEIGHTS.bold,
+    },
+    closeButton: {
+        padding: SPACING.xs,
+    },
+    videoContainer: {
+        width: '100%',
+        aspectRatio: 16 / 9,
+        backgroundColor: '#000',
     },
 });
