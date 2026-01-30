@@ -289,7 +289,7 @@ export default function ScannerScreen() {
       {!capturedImage ? (
         <>
           {isCameraActive ? (
-            <>
+            <View style={styles.cameraContainer}>
               <CameraView
                 ref={cameraRef}
                 style={styles.camera}
@@ -313,7 +313,7 @@ export default function ScannerScreen() {
                   <View style={styles.captureButtonInner} />
                 </TouchableOpacity>
               </View>
-            </>
+            </View>
           ) : (
             <ScrollView contentContainerStyle={styles.contentContainer}>
               <View style={styles.imagePreview}>
@@ -355,8 +355,15 @@ export default function ScannerScreen() {
             />
           </View>
 
-          {!loading && (
+          {!loading && !extractedData && (
             <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: colors.tint }]}
+                onPress={sendImageToApi}
+              >
+                <Text style={styles.buttonText}>Proceed</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: colors.tabIconDefault }]}
                 onPress={resetScanner}
@@ -525,6 +532,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  cameraContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   camera: {
     flex: 1,
   },
@@ -548,6 +559,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 30,
     backgroundColor: 'rgba(0,0,0,0.5)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   captureButton: {
     width: 70,
@@ -565,7 +580,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    padding: 20,
+    padding: 0,
     justifyContent: 'center',
   },
   imagePreview: {
@@ -580,40 +595,44 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   subtitle: {
-    fontSize: 14,
-    opacity: 0.6,
+    fontSize: 16,
+    opacity: 0.7,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 40,
   },
   buttonGroup: {
-    gap: 15,
+    gap: 12,
+    paddingHorizontal: 20,
   },
   button: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
-    color: '#000000',
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   previewContainer: {
     marginBottom: 20,
     borderRadius: 10,
     overflow: 'hidden',
+    width: '100%',
   },
   previewImage: {
     width: '100%',
-    height: 250,
+    height: 300,
     resizeMode: 'contain',
+    backgroundColor: '#000',
   },
   loadingContainer: {
     padding: 40,
@@ -808,6 +827,8 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     marginTop: 20,
+    marginHorizontal: 20,
+    marginBottom: 20,
     gap: 10,
   },
   message: {
