@@ -179,10 +179,15 @@ export default function ScannerScreen() {
       } as any);
 
       console.log('Uploading image to Zentel AI...');
+       const username = "tektech";
+      const password = "Zx#Pq!8Mv@3R";
+      const basic =
+        typeof btoa === "function" ? btoa(`${username}:${password}`) : "";
       
       const res = await fetch('https://api.zentelai.app/movie', {
         method: 'POST',
         headers: {
+          Authorization: `Basic ${basic}`,
           'context_user': 'jeevan',
         },
         body: form,
