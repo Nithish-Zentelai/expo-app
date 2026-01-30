@@ -5,8 +5,8 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useAuth0 } from 'react-native-auth0';
+import React, { useCallback } from 'react';
 import {
     Alert,
     Image,
@@ -154,28 +154,7 @@ const SectionHeader = ({ title, delay = 0 }: { title: string; delay?: number }) 
 // ============ Profile Screen Component ============
 
 export default function ProfileScreen() {
-    const [user, setUser] = useState<Auth0User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    // Fetch user from Auth0
-    useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                // Try to get user from secure storage
-                const userJSON = await SecureStore.getItemAsync('auth0_user');
-                if (userJSON) {
-                    const userData = JSON.parse(userJSON);
-                    setUser(userData);
-                }
-            } catch (error) {
-                console.error('Error fetching user:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchUser();
-    }, []);
+    const { user, isLoading, clearSession } = useAuth0();
 
     const handleNotifications = useCallback(() => {
         Alert.alert('Notifications', 'Notification settings coming soon!');
@@ -215,10 +194,20 @@ export default function ProfileScreen() {
             'Are you sure you want to sign out?',
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Sign Out', style: 'destructive' },
+                {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await clearSession();
+                        } catch (error) {
+                            console.error('Error signing out:', error);
+                        }
+                    },
+                },
             ]
         );
-    }, []);
+    }, [clearSession]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
