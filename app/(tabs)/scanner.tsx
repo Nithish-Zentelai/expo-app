@@ -83,42 +83,6 @@ export default function ScannerScreen() {
     }
   };
 
-  const uploadImage = async (blob: Blob, index: number) => {
-    // Upload to Zentel AI API using Basic Auth
-    try {
-      const form = new FormData();
-      form.append('imageType', 'Settings Page');
-      form.append('receipt', blob, `capture-${index + 1}.png`);
-      form.append('context_user', 'jeevan');
-
-      // Basic auth header
-      const username = 'tektech';
-      const password = 'Zx#Pq!8Mv@3R';
-      const basic = btoa(`${username}:${password}`);
-
-      const res = await fetch('https://api.zentelai.app/process-image-7', {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${basic}`,
-        },
-        body: form,
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(
-          `Upload failed: ${res.status} ${res.statusText} ${text}`
-        );
-      }
-
-      const json = await res.json();
-      return json;
-    } catch (err) {
-      console.warn('Upload to Zentel AI failed', err);
-      throw err;
-    }
-  };
-
   const sendImageToApi = async () => {
     if (!capturedImage) {
       Alert.alert('No image', 'Capture or pick an image first.');
@@ -127,33 +91,62 @@ export default function ScannerScreen() {
 
     setLoading(true);
     try {
-      // Convert base64 to Blob
-      const base64Data = capturedImageBase64
-        ? capturedImageBase64
-        : await convertUriToBase64(capturedImage);
+      // Get base64 data
+      const base64Data = capturedImageBase64 || await convertUriToBase64(capturedImage);
 
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      // For React Native, use the URI directly with FormData
+      const form = new FormData();
+      form.append('imageType', 'Settings Page');
+      form.append('receipt', {
+        uri: capturedImage,
+        type: 'image/jpeg',
+        name: `capture-${Date.now()}.jpg`,
+      } as any);
+      form.append('context_user', 'jeevan');
+
+      // Basic auth header
+      const username = 'tektech';
+      const password = 'Zx#Pq!8Mv@3R';
+      const basic = btoa(`${username}:${password}`);
+
+      console.log('Uploading image to Zentel AI...');
+      
+      const res = await fetch('https://api.zentelai.app/process-image-7', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${basic}`,
+        },
+        body: form,
+      });
+
+      console.log('Response status:', res.status);
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('API Error:', text);
+        throw new Error(
+          `Upload failed: ${res.status} ${res.statusText} ${text}`
+        );
       }
-      const blob = new Blob([bytes], { type: 'image/png' });
 
-      // Upload to Zentel AI API
-      const result = await uploadImage(blob, 0);
+      const result = await res.json();
+      console.log('API Response:', result);
 
       // Extract and format the response
       const extractedInfo: ExtractedData = {
         text: result?.extracted_text || result?.text || 'No text extracted',
         confidence: result?.confidence || 0.8,
-        labels: result?.labels || result?.categories || [],
+        labels: Array.isArray(result?.labels) ? result.labels : (Array.isArray(result?.categories) ? result.categories : []),
         ...result,
       };
 
       setExtractedData(extractedInfo);
     } catch (error) {
       console.error('API error:', error);
-      Alert.alert('Error', 'Failed to process image. Please try again.');
+      Alert.alert(
+        'Error',
+        `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
       
       setExtractedData({
         text: 'Failed to extract data from image',
