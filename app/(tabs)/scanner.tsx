@@ -234,18 +234,22 @@ export default function ScannerScreen() {
       const result = await res.json();
       console.log('API Response:', result);
       console.log('API Response Keys:', Object.keys(result));
+      console.log('Full Response Structure:', JSON.stringify(result, null, 2));
 
-      // Extract and format the response - store the raw response for combining later
+      // Extract the nested extractedData properly
+      const nestedExtracted = result?.extractedData?.extractedData || result?.extractedData || result;
+      
       const extractedInfo: ExtractedData = {
         text: result?.extracted_text || result?.text || 'No text extracted',
         confidence: result?.confidence || 0.8,
         labels: Array.isArray(result?.labels) ? result.labels : (Array.isArray(result?.categories) ? result.categories : []),
         rawResponse: result,
-        extractedData: result?.extractedData || result,
+        extractedData: nestedExtracted,
         ...result,
       };
 
       console.log('Extracted Info:', extractedInfo);
+      console.log('Extracted Data Content:', nestedExtracted);
       setExtractedData(extractedInfo);
     } catch (error) {
       console.error('API error:', error);
@@ -421,60 +425,41 @@ export default function ScannerScreen() {
                 </ThemedText>
               </View>
 
-              {/* Extracted Data from API */}
-              {extractedData.extractedData && typeof extractedData.extractedData === 'object' && (
+              {/* Extracted Data Card - Display all available data */}
+              {extractedData && (
                 <View style={styles.extractedDataCard}>
                   <View style={styles.extractedCardHeader}>
                     <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
                   </View>
                   <View style={styles.extractedDataContent}>
-                    {normalizeDisplayEntries(extractedData.extractedData)
-                      .filter(
-                        ([k, v]) =>
-                          v !== null &&
-                          v !== undefined &&
-                          String(v).trim() !== '' &&
-                          String(v) !== 'N/A'
+                    {/* Try to display extractedData first */}
+                    {extractedData.extractedData && typeof extractedData.extractedData === 'object' ? (
+                      normalizeDisplayEntries(extractedData.extractedData).length > 0 ? (
+                        normalizeDisplayEntries(extractedData.extractedData)
+                          .filter(
+                            ([k, v]) =>
+                              v !== null &&
+                              v !== undefined &&
+                              String(v).trim() !== '' &&
+                              String(v) !== 'N/A'
+                          )
+                          .map(([key, value], index) => (
+                            <View key={index} style={styles.dataItem}>
+                              <ThemedText style={styles.dataKey}>{key}</ThemedText>
+                              <ThemedText style={styles.dataValueFormatted} numberOfLines={4}>
+                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                              </ThemedText>
+                            </View>
+                          ))
+                      ) : (
+                        <ThemedText style={styles.noDataText}>No data extracted</ThemedText>
                       )
-                      .map(([key, value], index) => (
-                        <View key={index} style={styles.dataItem}>
-                          <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                          <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
-                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                          </ThemedText>
-                        </View>
-                      ))}
+                    ) : (
+                      <ThemedText style={styles.noDataText}>No data available</ThemedText>
+                    )}
                   </View>
                 </View>
               )}
-
-              {/* Fallback: Raw Response Data */}
-              {(!extractedData.extractedData || Object.keys(extractedData.extractedData).length === 0) &&
-                extractedData.rawResponse &&
-                Object.keys(extractedData.rawResponse).length > 0 && (
-                  <View style={styles.extractedDataCard}>
-                    <View style={styles.extractedCardHeader}>
-                      <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
-                    </View>
-                    <View style={styles.extractedDataContent}>
-                      {Object.entries(extractedData.rawResponse)
-                        .filter(([key, value]) => {
-                          if (key === 'extracted_text' || key === 'text' || value === null || value === undefined)
-                            return false;
-                          const s = String(value).trim();
-                          return s !== '' && s !== 'N/A';
-                        })
-                        .map(([key, value], index) => (
-                          <View key={index} style={styles.dataItem}>
-                            <ThemedText style={styles.dataKey}>{key}</ThemedText>
-                            <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
-                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                            </ThemedText>
-                          </View>
-                        ))}
-                    </View>
-                  </View>
-                )}
 
               {/* Battery Information - Removed if not needed */}
               {/* IMEI Information - Removed if not needed */}
@@ -781,6 +766,13 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 13,
+  },
+  noDataText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   actionButtons: {
     marginTop: 20,
