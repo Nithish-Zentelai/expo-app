@@ -131,15 +131,18 @@ export default function ScannerScreen() {
 
       const result = await res.json();
       console.log('API Response:', result);
+      console.log('API Response Keys:', Object.keys(result));
 
       // Extract and format the response
       const extractedInfo: ExtractedData = {
         text: result?.extracted_text || result?.text || 'No text extracted',
         confidence: result?.confidence || 0.8,
         labels: Array.isArray(result?.labels) ? result.labels : (Array.isArray(result?.categories) ? result.categories : []),
+        rawResponse: result,
         ...result,
       };
 
+      console.log('Extracted Info:', extractedInfo);
       setExtractedData(extractedInfo);
     } catch (error) {
       console.error('API error:', error);
@@ -305,199 +308,39 @@ export default function ScannerScreen() {
           {extractedData && !loading && (
             <View style={styles.dataContainer}>
               {/* Success Header */}
-              {extractedData.extractedData?.success && (
-                <View style={styles.successHeader}>
-                  <View style={styles.successIcon}>
-                    <ThemedText style={styles.checkmark}>✓</ThemedText>
-                  </View>
-                  <ThemedText style={styles.successTitle}>Extraction Complete</ThemedText>
-                  <ThemedText style={styles.successSubtitle}>
-                    Combined extracted data from captures
-                  </ThemedText>
+              <View style={styles.successHeader}>
+                <View style={styles.successIcon}>
+                  <ThemedText style={styles.checkmark}>✓</ThemedText>
                 </View>
-              )}
+                <ThemedText style={styles.successTitle}>Extraction Complete</ThemedText>
+                <ThemedText style={styles.successSubtitle}>
+                  Combined extracted data from captures
+                </ThemedText>
+              </View>
 
-              {/* Device Information Card */}
-              {extractedData.extractedData && (
+              {/* Generic Data Display */}
+              {extractedData.rawResponse && Object.keys(extractedData.rawResponse).length > 0 && (
                 <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>Device Information</ThemedText>
-
-                  {extractedData.extractedData['Model No'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Model:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Model No']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['Brand Name (MFG)'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Brand:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Brand Name (MFG)']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['Product Name'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Product:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Product Name']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['Product Type'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Type:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Product Type']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['Serial Number'] && extractedData.extractedData['Serial Number'] !== 'N/A' && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Serial:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Serial Number']}
-                      </ThemedText>
-                    </View>
-                  )}
+                  <ThemedText style={styles.cardTitle}>Extracted Data</ThemedText>
+                  {Object.entries(extractedData.rawResponse).map(([key, value], index) => {
+                    if (key === 'extracted_text' || key === 'text' || value === null || value === undefined) return null;
+                    
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+                    
+                    return (
+                      <View key={index} style={styles.cardRow}>
+                        <ThemedText style={styles.cardLabel}>{key}:</ThemedText>
+                        <ThemedText style={styles.cardValue}>{displayValue}</ThemedText>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
 
-              {/* Battery Information */}
-              {(extractedData.extractedData?.['Battery Status'] ||
-                extractedData.extractedData?.['Battery Percentage'] ||
-                extractedData.extractedData?.['Battery Messages']) && (
-                <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>Battery Information</ThemedText>
-
-                  {extractedData.extractedData['Battery Percentage'] && extractedData.extractedData['Battery Percentage'] !== 'N/A' && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Battery Health:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Battery Percentage']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['Battery Messages'] && extractedData.extractedData['Battery Messages'] !== 'N/A' && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Battery Messages:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['Battery Messages']}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* IMEI Information */}
-              {(extractedData.extractedData?.['- Mobile (IMEI 1)'] ||
-                extractedData.extractedData?.['- Mobile (IMEI 2)']) && (
-                <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>Mobile Information</ThemedText>
-
-                  {extractedData.extractedData['- Mobile (IMEI 1)'] && extractedData.extractedData['- Mobile (IMEI 1)'] !== 'N/A' && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>IMEI 1:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['- Mobile (IMEI 1)']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.extractedData['- Mobile (IMEI 2)'] && extractedData.extractedData['- Mobile (IMEI 2)'] !== 'N/A' && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>IMEI 2:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.extractedData['- Mobile (IMEI 2)']}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Raw Data from About Section */}
-              {extractedData.rawData?.About && (
-                <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>System Details</ThemedText>
-
-                  {extractedData.rawData.About.Name && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Name:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.About.Name}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.rawData.About['iOS Version'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>iOS Version:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.About['iOS Version']}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.rawData.About['Model Name'] && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Model Name:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.About['Model Name']}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Media Information */}
-              {extractedData.rawData?.Media && (
-                <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>Media Storage</ThemedText>
-
-                  {extractedData.rawData.Media.Photos && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Photos:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.Media.Photos}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.rawData.Media.Videos && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Videos:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.Media.Videos}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.rawData.Media.Songs && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Songs:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.Media.Songs}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {extractedData.rawData.Media.Applications && (
-                    <View style={styles.cardRow}>
-                      <ThemedText style={styles.cardLabel}>Applications:</ThemedText>
-                      <ThemedText style={styles.cardValue}>
-                        {extractedData.rawData.Media.Applications}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-              )}
+              {/* Battery Information - Removed if not needed */}
+              {/* IMEI Information - Removed if not needed */}
+              {/* Raw Data from About Section - Removed if not needed */}
+              {/* Media Information - Removed if not needed */}
 
               {/* Warnings if any */}
               {extractedData.warnings && Array.isArray(extractedData.warnings) && extractedData.warnings.length > 0 && (
