@@ -333,14 +333,16 @@ export default function ScannerScreen() {
                   style={[styles.button, { backgroundColor: colors.tint }]}
                   onPress={() => setIsCameraActive(true)}
                 >
-                  <Text style={styles.buttonText}> Capture Photo</Text>
+                  <Text style={[styles.buttonText, { color: colorScheme === 'dark' ? '#000' : '#fff' }]}>
+                    Capture Photo
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.button, { backgroundColor: colors.tabIconDefault }]}
                   onPress={handlePickImage}
                 >
-                  <Text style={styles.buttonText}> Choose from Gallery</Text>
+                  <Text style={styles.buttonText}>Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -348,27 +350,30 @@ export default function ScannerScreen() {
         </>
       ) : (
         <ScrollView contentContainerStyle={styles.contentContainer}>
+          {!extractedData && (
           <View style={styles.previewContainer}>
+            
             <Image
               source={{ uri: capturedImage }}
               style={styles.previewImage}
             />
+           
           </View>
-
+          )}
           {!loading && !extractedData && (
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.tint }]}
+                style={[styles.button, styles.proceedButton, { backgroundColor: '#00BF6F' }]}
                 onPress={sendImageToApi}
               >
-                <Text style={styles.buttonText}>Proceed</Text>
+                <Text style={[styles.buttonText, { color: '#fff' }]}>Proceed</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.tabIconDefault }]}
+                style={[styles.button, styles.retakeButton]}
                 onPress={resetScanner}
               >
-                <Text style={styles.buttonText}>Retake</Text>
+                <Text style={[styles.buttonText, { color: colorScheme === 'dark' ? '#fff' : '#000' }]}>Retake</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -392,9 +397,9 @@ export default function ScannerScreen() {
                       style={styles.backdropImage}
                     />
                     <View style={styles.gradientOverlay} />
-                    <TouchableOpacity style={styles.playButtonOverlay}>
+                    {/* <TouchableOpacity style={styles.playButtonOverlay}>
                       <Text style={styles.playIcon}>▶</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
                   </View>
 
                   {/* Movie Info Section */}
@@ -516,10 +521,10 @@ export default function ScannerScreen() {
 
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={[styles.button, { backgroundColor: colors.tint }]}
+              style={[styles.button, styles.proceedButton, { backgroundColor: '#00BF6F' }]}
               onPress={resetScanner}
             >
-              <Text style={styles.buttonText}>Scan Again</Text>
+              <Text style={[styles.buttonText, { color: '#fff' }]}>Scan Again</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -616,6 +621,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  proceedButton: {
+    backgroundColor: '#00BF6F',
+  },
+  retakeButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 0, 0, 0.2)',
   },
   buttonText: {
     color: '#ffffff',
