@@ -21,6 +21,8 @@ interface ExtractedData {
   text: string;
   confidence?: number;
   labels?: string[];
+  rawResponse?: any;
+  extractedData?: Record<string, any>;
   [key: string]: any;
 }
 
@@ -35,6 +37,105 @@ export default function ScannerScreen() {
   const [loading, setLoading] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const cameraRef = useRef<CameraView>(null);
+
+  // Helper: Check if response has meaningful extracted data
+  const responseHasExtraction = (r: any) => {
+    if (!r) return false;
+    if (r.success) return true;
+    const extracted = r?.extractedData?.extractedData;
+    if (!extracted || typeof extracted !== 'object') return false;
+    const skip = new Set([
+      'image_clarity_percentage',
+      'extraction_source',
+      'confidence_notes',
+      'image_type_warning',
+      'detected_image_type',
+      'missing_fields',
+    ]);
+    for (const k of Object.keys(extracted)) {
+      if (skip.has(k)) continue;
+      const v = extracted[k];
+      if (v === null || v === undefined) continue;
+      const s = String(v).trim();
+      if (s === '' || s === 'N/A') continue;
+      return true;
+    }
+    return false;
+  };
+
+  // Helper: Normalize display entries for better formatting
+  const normalizeDisplayEntries = (obj: any) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return [];
+    try {
+      const entries = Object.entries(obj) as [string, any][];
+      const batteryCandidates = [
+        'Battery Percentage',
+        'Battery Percentage (%)',
+        'Battery Health (%)',
+        'Maximum Capacity',
+        'Battery Level',
+        'Battery Status',
+        'Battery',
+        'Battery Condition',
+      ];
+
+      const mapKey = (k: string) => {
+        const bk = k.toLowerCase();
+        if (
+          bk.includes('battery percentage') ||
+          bk.includes('battery level') ||
+          bk.includes('maximum capacity') ||
+          bk === 'battery' ||
+          bk.includes('battery status') ||
+          bk.includes('battery condition')
+        ) {
+          return 'Battery Health';
+        }
+        if (bk.includes('mobile (imei') || bk.startsWith('imei')) return k;
+        return k;
+      };
+
+      const findBatteryPercentage = (source: any) => {
+        if (!source || typeof source !== 'object') return undefined;
+        for (const k of batteryCandidates) {
+          const v = source[k];
+          if (v === null || v === undefined) continue;
+          const s = String(v).trim();
+          const m = s.match(/(\d{1,3})\s*%?/);
+          if (m) return `${m[1]}%`;
+        }
+        const lower = Object.keys(source).reduce((acc: any, key) => {
+          acc[key.toLowerCase()] = source[key];
+          return acc;
+        }, {} as any);
+        for (const k of batteryCandidates) {
+          const v = lower[k.toLowerCase()];
+          if (v === null || v === undefined) continue;
+          const s = String(v).trim();
+          const m = s.match(/(\d{1,3})\s*%?/);
+          if (m) return `${m[1]}%`;
+        }
+        return undefined;
+      };
+
+      const out: Record<string, any> = {};
+      for (const [k, v] of entries) {
+        const nk = mapKey(k);
+        if (nk === 'Battery Health') {
+          const pct = findBatteryPercentage(obj);
+          if (pct) out[nk] = pct;
+          continue;
+        }
+        if (!out[nk] || out[nk] === '' || String(out[nk]) === 'N/A') {
+          out[nk] = v;
+        }
+      }
+      return Object.entries(out) as [string, any][];
+    } catch (err) {
+      console.error('normalizeDisplayEntries failed', err);
+      return [];
+    }
+  };
 
   useEffect(() => {
     if (!permission) {
@@ -133,12 +234,13 @@ export default function ScannerScreen() {
       console.log('API Response:', result);
       console.log('API Response Keys:', Object.keys(result));
 
-      // Extract and format the response
+      // Extract and format the response - store the raw response for combining later
       const extractedInfo: ExtractedData = {
         text: result?.extracted_text || result?.text || 'No text extracted',
         confidence: result?.confidence || 0.8,
         labels: Array.isArray(result?.labels) ? result.labels : (Array.isArray(result?.categories) ? result.categories : []),
         rawResponse: result,
+        extractedData: result?.extractedData || result,
         ...result,
       };
 
@@ -314,28 +416,64 @@ export default function ScannerScreen() {
                 </View>
                 <ThemedText style={styles.successTitle}>Extraction Complete</ThemedText>
                 <ThemedText style={styles.successSubtitle}>
-                  Combined extracted data from captures
+                  Successfully extracted device information
                 </ThemedText>
               </View>
 
-              {/* Generic Data Display */}
-              {extractedData.rawResponse && Object.keys(extractedData.rawResponse).length > 0 && (
-                <View style={styles.infoCard}>
-                  <ThemedText style={styles.cardTitle}>Extracted Data</ThemedText>
-                  {Object.entries(extractedData.rawResponse).map(([key, value], index) => {
-                    if (key === 'extracted_text' || key === 'text' || value === null || value === undefined) return null;
-                    
-                    const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-                    
-                    return (
-                      <View key={index} style={styles.cardRow}>
-                        <ThemedText style={styles.cardLabel}>{key}:</ThemedText>
-                        <ThemedText style={styles.cardValue}>{displayValue}</ThemedText>
-                      </View>
-                    );
-                  })}
+              {/* Extracted Data from API */}
+              {extractedData.extractedData && typeof extractedData.extractedData === 'object' && (
+                <View style={styles.extractedDataCard}>
+                  <View style={styles.extractedCardHeader}>
+                    <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
+                  </View>
+                  <View style={styles.extractedDataContent}>
+                    {normalizeDisplayEntries(extractedData.extractedData)
+                      .filter(
+                        ([k, v]) =>
+                          v !== null &&
+                          v !== undefined &&
+                          String(v).trim() !== '' &&
+                          String(v) !== 'N/A'
+                      )
+                      .map(([key, value], index) => (
+                        <View key={index} style={styles.dataItem}>
+                          <ThemedText style={styles.dataKey}>{key}</ThemedText>
+                          <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
+                            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                          </ThemedText>
+                        </View>
+                      ))}
+                  </View>
                 </View>
               )}
+
+              {/* Fallback: Raw Response Data */}
+              {(!extractedData.extractedData || Object.keys(extractedData.extractedData).length === 0) &&
+                extractedData.rawResponse &&
+                Object.keys(extractedData.rawResponse).length > 0 && (
+                  <View style={styles.extractedDataCard}>
+                    <View style={styles.extractedCardHeader}>
+                      <ThemedText style={styles.extractedCardTitle}>Extracted Information</ThemedText>
+                    </View>
+                    <View style={styles.extractedDataContent}>
+                      {Object.entries(extractedData.rawResponse)
+                        .filter(([key, value]) => {
+                          if (key === 'extracted_text' || key === 'text' || value === null || value === undefined)
+                            return false;
+                          const s = String(value).trim();
+                          return s !== '' && s !== 'N/A';
+                        })
+                        .map(([key, value], index) => (
+                          <View key={index} style={styles.dataItem}>
+                            <ThemedText style={styles.dataKey}>{key}</ThemedText>
+                            <ThemedText style={styles.dataValueFormatted} numberOfLines={3}>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </ThemedText>
+                          </View>
+                        ))}
+                    </View>
+                  </View>
+                )}
 
               {/* Battery Information - Removed if not needed */}
               {/* IMEI Information - Removed if not needed */}
@@ -516,11 +654,48 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#00BF6F',
   },
-  cardTitle: {
+  extractedDataCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    marginBottom: 20,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  extractedCardHeader: {
+    backgroundColor: 'linear-gradient(135deg, #00BF6F 0%, #00A86B 100%)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  extractedCardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 12,
     color: '#00BF6F',
+  },
+  extractedDataContent: {
+    padding: 16,
+  },
+  dataItem: {
+    marginBottom: 16,
+  },
+  dataKey: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  dataValueFormatted: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.text,
+    lineHeight: 22,
   },
   cardRow: {
     flexDirection: 'row',
@@ -528,18 +703,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    alignItems: 'flex-start',
   },
   cardLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     opacity: 0.7,
-    flex: 1,
+    flex: 0.4,
   },
   cardValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    flex: 1,
+    flex: 0.6,
     textAlign: 'right',
+    color: '#00BF6F',
   },
   warningCard: {
     borderLeftColor: '#FFB800',
