@@ -42,6 +42,7 @@ export interface MovieRow {
     release_year: number | null;
     rating: number;
     duration: number | null;
+    trailer_youtube_id: string | null;
     is_trending: boolean;
     is_popular: boolean;
     is_new_release: boolean;
@@ -57,6 +58,7 @@ export interface MovieInsert {
     release_year?: number | null;
     rating?: number;
     duration?: number | null;
+    trailer_youtube_id?: string | null;
     is_trending?: boolean;
     is_popular?: boolean;
     is_new_release?: boolean;
@@ -72,6 +74,7 @@ export interface MovieUpdate {
     release_year?: number | null;
     rating?: number;
     duration?: number | null;
+    trailer_youtube_id?: string | null;
     is_trending?: boolean;
     is_popular?: boolean;
     is_new_release?: boolean;
@@ -136,6 +139,7 @@ export interface Movie {
     release_year: number | null;
     rating: number;
     duration: number | null;
+    trailer_youtube_id: string | null;
     is_trending: boolean;
     is_popular: boolean;
     is_new_release: boolean;
