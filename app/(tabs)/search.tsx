@@ -46,13 +46,8 @@ export default function SearchScreen() {
  
     useEffect(() => {
         if (Platform.OS === 'web') return;
-        try {
-            // Load voice module only on native to avoid crashing Expo Go when unavailable
-            const mod = require('@react-native-voice/voice').default;
-            setVoiceModule(mod);
-        } catch {
-            setVoiceModule(null);
-        }
+        // Native voice support disabled - using Web SpeechRecognition API instead
+        setVoiceModule(null);
     }, []);
  
     // Voice assistant setup (web SpeechRecognition vs native Voice)
