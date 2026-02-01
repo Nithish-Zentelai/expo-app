@@ -46,8 +46,15 @@ export default function SearchScreen() {
  
     useEffect(() => {
         if (Platform.OS === 'web') return;
-        // Native voice support disabled - using Web SpeechRecognition API instead
-        setVoiceModule(null);
+        try {
+            // Load voice module for native Android voice recognition
+            const mod = require('@react-native-voice/voice').default;
+            setVoiceModule(mod);
+            console.log('Voice module loaded successfully');
+        } catch (error) {
+            console.warn('Failed to load voice module:', error);
+            setVoiceModule(null);
+        }
     }, []);
  
     // Voice assistant setup (web SpeechRecognition vs native Voice)
@@ -89,33 +96,42 @@ export default function SearchScreen() {
         // Native result handler: push transcript into search + input
         voiceModule.onSpeechResults = (event: { value?: string[] }) => {
             const transcript = event?.value?.[0] ?? '';
+            console.log('Voice transcript received:', transcript);
             if (transcript.trim()) {
                 search(transcript);
                 syncInputText(transcript);
+                setIsListening(false);
             }
         };
-        voiceModule.onSpeechEnd = () => setIsListening(false);
-        voiceModule.onSpeechError = (event: { error?: { message?: string; code?: string | number } }) => {
+        voiceModule.onSpeechEnd = () => {
+            console.log('Speech recognition ended');
             setIsListening(false);
-            const message = event?.error?.message?.toLowerCase() ?? '';
-            if (message.includes('not available') || message.includes('not supported')) {
-                setIsVoiceSupported(false);
-            }
+        };
+        voiceModule.onSpeechError = (error: any) => {
+            console.error('Voice recognition error:', error);
+            setIsListening(false);
+            Alert.alert('Voice Error', `Could not recognize speech: ${error?.error?.message || 'Unknown error'}`);
         };
  
         const checkAvailability = async () => {
             try {
-                const available = await voiceModule.isAvailable();
+                const available = await voiceModule.isAvailable?.();
+                console.log('Voice module availability check:', available);
                 setIsVoiceSupported(Boolean(available));
-            } catch {
+            } catch (error) {
+                console.warn('Voice availability check failed:', error);
                 setIsVoiceSupported(false);
             }
         };
- 
+
         checkAvailability();
- 
+
         return () => {
-            voiceModule.destroy().then(voiceModule.removeAllListeners);
+            try {
+                voiceModule.destroy?.().then(() => voiceModule.removeAllListeners?.());
+            } catch (error) {
+                console.warn('Error cleaning up voice module:', error);
+            }
         };
     }, [search, voiceModule]);
  
