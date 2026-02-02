@@ -3,10 +3,9 @@
  * Animated search interface with debounced results and related suggestions
  * Uses TMDB search for real movie data
  */
- 
+
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
@@ -28,7 +27,6 @@ import { Movie } from '../../src/api/tmdb';
 import { MovieCard, MovieCardSkeleton } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
 import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
-import { transcribeAudio, isWhisperConfigured } from '../../src/utils/whisper';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function SearchScreen() {
@@ -38,77 +36,94 @@ export default function SearchScreen() {
         query = '',
         search,
     } = useSearchMovies();
- 
+
     const { data: homeData } = useHomeData();
     const inputRef = useRef<TextInput>(null);
-    const recordingRef = useRef<Audio.Recording | null>(null);
+    const recognitionRef = useRef<any>(null);
     const [isListening, setIsListening] = useState(false);
     const [isVoiceSupported, setIsVoiceSupported] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [voiceModule, setVoiceModule] = useState<any>(null);
 
-    // Setup audio recording and permissions on mount
     useEffect(() => {
-        const setupAudio = async () => {
-            try {
-                // Set audio mode for recording
-                await Audio.setAudioModeAsync({
-                    allowsRecordingIOS: true,
-                    playsInSilentModeIOS: true,
-                });
-                
-                // Check if Whisper is configured
-                const configured = isWhisperConfigured();
-                setIsVoiceSupported(configured);
-
-                if (!configured) {
-                    console.warn('Whisper API not configured. Voice search disabled.');
-                }
-            } catch (error) {
-                console.warn('Failed to setup audio:', error);
-                setIsVoiceSupported(false);
-            }
-        };
-
-        setupAudio();
+        if (Platform.OS === 'web') return;
+        try {
+            // Load voice module only on native to avoid crashing Expo Go when unavailable
+            const mod = require('@react-native-voice/voice').default;
+            setVoiceModule(mod);
+        } catch {
+            setVoiceModule(null);
+        }
     }, []);
- 
-    // Web SpeechRecognition setup (for web platform)
-    useEffect(() => {
-        if (Platform.OS !== 'web' || !isVoiceSupported) return;
 
-        if (typeof window === 'undefined') return;
-        const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognitionImpl) {
+    // Voice assistant setup (web SpeechRecognition vs native Voice)
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            if (typeof window === 'undefined') return;
+            const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (!SpeechRecognitionImpl) return;
+
+            const recognition = new SpeechRecognitionImpl();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            // Web result handler: push transcript into search + input
+            recognition.onresult = (event: any) => {
+                const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
+                if (transcript.trim()) {
+                    search(transcript);
+                    syncInputText(transcript);
+                }
+            };
+            recognition.onend = () => setIsListening(false);
+            recognition.onerror = () => setIsListening(false);
+
+            recognitionRef.current = recognition;
+            setIsVoiceSupported(true);
+
+            return () => {
+                recognition.stop?.();
+            };
+        }
+
+        if (!voiceModule) {
             setIsVoiceSupported(false);
             return;
         }
 
-        const recognition = new SpeechRecognitionImpl();
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        // Web result handler: push transcript into search + input
-        recognition.onresult = (event: any) => {
-            const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
+        // Native result handler: push transcript into search + input
+        voiceModule.onSpeechResults = (event: { value?: string[] }) => {
+            const transcript = event?.value?.[0] ?? '';
             if (transcript.trim()) {
                 search(transcript);
                 syncInputText(transcript);
             }
         };
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => setIsListening(false);
+        voiceModule.onSpeechEnd = () => setIsListening(false);
+        voiceModule.onSpeechError = (event: { error?: { message?: string; code?: string | number } }) => {
+            setIsListening(false);
+            const message = event?.error?.message?.toLowerCase() ?? '';
+            if (message.includes('not available') || message.includes('not supported')) {
+                setIsVoiceSupported(false);
+            }
+        };
 
-        // Store for web platform use
-        if (Platform.OS === 'web') {
-            (recognitionRef as any).current = recognition;
-        }
+        const checkAvailability = async () => {
+            try {
+                const available = await voiceModule.isAvailable();
+                setIsVoiceSupported(Boolean(available));
+            } catch {
+                setIsVoiceSupported(false);
+            }
+        };
+
+        checkAvailability();
 
         return () => {
-            recognition.stop?.();
+            voiceModule.destroy().then(voiceModule.removeAllListeners);
         };
-    }, [search, isVoiceSupported]);
- 
+    }, [search, voiceModule]);
+
     // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
         const input = inputRef.current as { setNativeProps?: (args: { text: string }) => void } | null;
@@ -116,11 +131,11 @@ export default function SearchScreen() {
             input.setNativeProps({ text });
         }
     };
- 
+
     const handleSearch = (text: string) => {
         search(text);
     };
- 
+
     const handleClear = () => {
         search('');
         if (typeof inputRef.current?.clear === 'function') {
@@ -128,18 +143,18 @@ export default function SearchScreen() {
         }
         Keyboard.dismiss();
     };
- 
+
     const handleSuggestionClick = (title: string) => {
         search(title);
         syncInputText(title);
         Keyboard.dismiss();
     };
- 
+
     const onSearchSubmit = () => {
         Keyboard.dismiss();
     };
- 
-    // Android-only mic permission before starting audio recording
+
+    // Android-only mic permission before starting native voice recognition
     const requestAudioPermission = async () => {
         if (Platform.OS !== 'android') return true;
         const granted = await PermissionsAndroid.request(
@@ -153,32 +168,28 @@ export default function SearchScreen() {
         return granted === PermissionsAndroid.RESULTS.GRANTED;
     };
 
-    // Mic button toggles recording and transcription
+    // Mic button toggles listening state
     const handleVoicePress = async () => {
         if (!isVoiceSupported) {
-            Alert.alert(
-                'Voice search unavailable',
-                'OpenAI API is not configured. Please set EXPO_PUBLIC_OPENAI_API_KEY in your environment.'
-            );
+            if (Platform.OS === 'web') {
+                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
+            } else {
+                Alert.alert(
+                    'Voice search unavailable',
+                    'Install/enable Speech Services by Google, set it as the default voice input, and allow microphone access.'
+                );
+            }
             return;
         }
 
         if (Platform.OS === 'web') {
-            // Web: Use native SpeechRecognition API
-            const rec = (recognitionRef as any).current;
-            if (!rec) {
-                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
-                return;
-            }
-
             if (isListening) {
-                rec?.stop?.();
+                recognitionRef.current?.stop?.();
                 setIsListening(false);
                 return;
             }
-
             try {
-                rec?.start?.();
+                recognitionRef.current?.start?.();
                 setIsListening(true);
             } catch {
                 setIsListening(false);
@@ -186,7 +197,6 @@ export default function SearchScreen() {
             return;
         }
 
-        // Native: Use Whisper API with audio recording
         try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
@@ -195,75 +205,26 @@ export default function SearchScreen() {
             }
 
             if (isListening) {
-                // Stop recording
-                if (recordingRef.current) {
-                    setIsListening(false);
-                    setIsTranscribing(true);
-
-                    const recording = recordingRef.current;
-                    recordingRef.current = null;
-
-                    try {
-                        await recording.stopAndUnloadAsync();
-                        const uri = recording.getURI();
-
-                        if (!uri) {
-                            Alert.alert('Error', 'Failed to get recording URI');
-                            setIsTranscribing(false);
-                            return;
-                        }
-
-                        // Send to Whisper API for transcription
-                        const transcript = await transcribeAudio(uri);
-                        if (transcript) {
-                            search(transcript);
-                            syncInputText(transcript);
-                        }
-                    } catch (error) {
-                        console.error('Transcription error:', error);
-                        Alert.alert(
-                            'Transcription Error',
-                            error instanceof Error
-                                ? error.message
-                                : 'Failed to transcribe audio. Please try again.'
-                        );
-                    } finally {
-                        setIsTranscribing(false);
-                    }
-                }
-            } else {
-                // Start recording
-                setIsListening(true);
-                try {
-                    const recording = new Audio.Recording();
-                    recordingRef.current = recording;
-
-                    await recording.prepareToRecordAsync(
-                        Audio.RecordingOptionsPresets.HIGH_QUALITY
-                    );
-                    await recording.startAsync();
-                } catch (error) {
-                    console.error('Recording error:', error);
-                    setIsListening(false);
-                    Alert.alert(
-                        'Recording Error',
-                        'Failed to start recording. Please try again.'
-                    );
-                }
+                await voiceModule.stop();
+                setIsListening(false);
+                return;
             }
-        } catch (error) {
-            console.error('Voice press error:', error);
+
+            await voiceModule.start('en-US');
+            setIsListening(true);
+        } catch {
             setIsListening(false);
+            setIsVoiceSupported(false);
         }
     };
- 
+
     // Calculate related movies (Trending but not in current results)
     const relatedMovies = useMemo(() => {
         if (!homeData.trending || homeData.trending.length === 0) return [];
         const resultIds = results?.map(r => r.id) || [];
         return homeData.trending.filter(m => !resultIds.includes(m.id)).slice(0, 6);
     }, [homeData.trending, results]);
- 
+
     // Local fallback matches from home lists (helps when TMDB returns empty).
     const localMatches = useMemo(() => {
         const searchText = query.trim().toLowerCase();
@@ -283,7 +244,7 @@ export default function SearchScreen() {
             return true;
         });
     }, [homeData, query]);
- 
+
     const combinedResults = useMemo(() => {
         if (!query.trim()) return results || [];
         const merged = [...(results || [])];
@@ -293,7 +254,7 @@ export default function SearchScreen() {
         });
         return merged;
     }, [localMatches, query, results]);
- 
+
     const renderItem = useCallback(({ item, index }: { item: Movie, index: number }) => (
         <Animated.View
             key={item.id}
@@ -308,7 +269,7 @@ export default function SearchScreen() {
             />
         </Animated.View>
     ), []);
- 
+
     const ListFooterContent = useMemo(() => {
         if (query.trim().length > 0 && relatedMovies.length > 0) {
             return (
@@ -331,7 +292,7 @@ export default function SearchScreen() {
         }
         return null;
     }, [query, relatedMovies]);
- 
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Search Bar */}
@@ -355,7 +316,6 @@ export default function SearchScreen() {
                         onPress={handleVoicePress}
                         style={styles.voiceButton}
                         accessibilityLabel="Voice search"
-                        disabled={isTranscribing}
                     >
                         <Ionicons
                             name={
@@ -378,7 +338,7 @@ export default function SearchScreen() {
                     )}
                 </View>
             </View>
- 
+
             {/* Default View (No Query) */}
             {query.trim().length === 0 && !loading && (
                 <View style={styles.suggestionsContainer}>
@@ -395,7 +355,7 @@ export default function SearchScreen() {
                             </TouchableOpacity>
                         ))}
                     </View>
- 
+
                     <View style={styles.topSearchSection}>
                         <Text style={styles.sectionTitle}>Popular Content</Text>
                         {homeData.trending.slice(0, 4).map((item) => (
@@ -417,7 +377,7 @@ export default function SearchScreen() {
                     </View>
                 </View>
             )}
- 
+
             {/* Results Grid */}
             <FlatList
                 data={combinedResults || []}
@@ -464,7 +424,7 @@ export default function SearchScreen() {
         </SafeAreaView>
     );
 }
- 
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     searchBarContainer: {
