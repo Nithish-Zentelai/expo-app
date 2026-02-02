@@ -42,9 +42,11 @@ export default function SearchScreen() {
     const { data: homeData } = useHomeData();
     const inputRef = useRef<TextInput>(null);
     const recordingRef = useRef<Audio.Recording | null>(null);
+    const recognitionRef = useRef<any>(null);
     const [isListening, setIsListening] = useState(false);
     const [isVoiceSupported, setIsVoiceSupported] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [manualText, setManualText] = useState(''); // Track manual text input
 
     // Setup audio recording and permissions on mount
     useEffect(() => {
@@ -118,10 +120,12 @@ export default function SearchScreen() {
     };
  
     const handleSearch = (text: string) => {
+        setManualText(text);
         search(text);
     };
  
     const handleClear = () => {
+        setManualText('');
         search('');
         if (typeof inputRef.current?.clear === 'function') {
             inputRef.current.clear();
@@ -214,10 +218,22 @@ export default function SearchScreen() {
                         }
 
                         // Send to Whisper API for transcription
-                        const transcript = await transcribeAudio(uri);
-                        if (transcript) {
-                            search(transcript);
-                            syncInputText(transcript);
+                        try {
+                            const transcript = await transcribeAudio(uri);
+                            if (transcript && transcript.trim()) {
+                                // Update both the internal state and the search
+                                setManualText(transcript);
+                                search(transcript);
+                                console.log('Transcribed:', transcript);
+                            } else {
+                                Alert.alert('Transcription', 'No speech detected. Please try again.');
+                            }
+                        } catch (transcribeError) {
+                            console.error('Transcription error:', transcribeError);
+                            const errorMessage = transcribeError instanceof Error 
+                                ? transcribeError.message 
+                                : 'Failed to transcribe audio. Please check your OpenAI API key and network connection.';
+                            Alert.alert('Transcription Error', errorMessage);
                         }
                     } catch (error) {
                         console.error('Transcription error:', error);
@@ -343,7 +359,7 @@ export default function SearchScreen() {
                         style={styles.input}
                         placeholder="Search movies..."
                         placeholderTextColor={COLORS.textMuted}
-                        value={query}
+                        value={query || manualText}
                         onChangeText={handleSearch}
                         onSubmitEditing={onSearchSubmit}
                         returnKeyType="search"
