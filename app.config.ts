@@ -24,6 +24,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         clientId: "tIy58ClruMMBEXwn4bfvtP5cGvWPa1Y1",
       },
     ],
+    [
+      "@react-native-voice/voice",
+      {
+        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone for voice search.",
+      },
+    ],
     "expo-router",
     [
       "expo-splash-screen",

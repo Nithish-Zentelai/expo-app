@@ -10,7 +10,11 @@
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.matrix"
+      "bundleIdentifier": "com.matrix",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses your microphone for voice search feature",
+        "NSLocationWhenInUseUsageDescription": "This app needs your location for search and recommendations"
+      }
     },
     "android": {
       "package": "com.matrix",
@@ -19,7 +23,11 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "INTERNET"
+      ]
     },
     "extra": {
       "router": {
