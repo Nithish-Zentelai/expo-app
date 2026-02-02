@@ -5,8 +5,9 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useAuth0 } from 'react-native-auth0';
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
     Alert,
     Image,
@@ -154,7 +155,15 @@ const SectionHeader = ({ title, delay = 0 }: { title: string; delay?: number }) 
 // ============ Profile Screen Component ============
 
 export default function ProfileScreen() {
+    const router = useRouter();
     const { user, isLoading, clearSession } = useAuth0();
+
+    // Redirect to login when user is logged out
+    useEffect(() => {
+        if (user === null && !isLoading) {
+            router.replace('/login');
+        }
+    }, [user, isLoading, router]);
 
     const handleNotifications = useCallback(() => {
         Alert.alert('Notifications', 'Notification settings coming soon!');
@@ -200,14 +209,17 @@ export default function ProfileScreen() {
                     onPress: async () => {
                         try {
                             await clearSession();
+                            // Navigate to login after successful logout
+                            router.replace('/login');
                         } catch (error) {
                             console.error('Error signing out:', error);
+                            Alert.alert('Error', 'Failed to sign out. Please try again.');
                         }
                     },
                 },
             ]
         );
-    }, [clearSession]);
+    }, [clearSession, router]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>

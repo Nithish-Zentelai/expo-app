@@ -6,11 +6,9 @@
  
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
-    ActivityIndicator,
     Dimensions,
     FlatList,
     Keyboard,
@@ -29,7 +27,7 @@ import { Movie } from '../../src/api/tmdb';
 import { MovieCard, MovieCardSkeleton } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
 import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
-import { transcribeAudio, isWhisperConfigured } from '../../src/utils/whisper';
+import { VoiceRecognizer } from '../../src/utils/voiceRecognition';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function SearchScreen() {
@@ -42,75 +40,25 @@ export default function SearchScreen() {
  
     const { data: homeData } = useHomeData();
     const inputRef = useRef<TextInput>(null);
-    const recordingRef = useRef<Audio.Recording | null>(null);
-    const recognitionRef = useRef<any>(null);
+    const voiceRecognizerRef = useRef<VoiceRecognizer | null>(null);
     const [isListening, setIsListening] = useState(false);
     const [isVoiceSupported, setIsVoiceSupported] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-    const [manualText, setManualText] = useState(''); // Track manual text input
+    const [manualText, setManualText] = useState('');
 
-    // Setup audio recording and permissions on mount
+    // Initialize Voice Recognizer
     useEffect(() => {
-        const setupAudio = async () => {
-            try {
-                // Set audio mode for recording
-                await Audio.setAudioModeAsync({
-                    allowsRecordingIOS: true,
-                    playsInSilentModeIOS: true,
-                });
-                
-                // Check if Whisper is configured
-                const configured = isWhisperConfigured();
-                setIsVoiceSupported(configured);
+        voiceRecognizerRef.current = new VoiceRecognizer();
+        const supported = voiceRecognizerRef.current.isSupported();
+        setIsVoiceSupported(supported);
 
-                if (!configured) {
-                    console.warn('Whisper API not configured. Voice search disabled.');
-                }
-            } catch (error) {
-                console.warn('Failed to setup audio:', error);
-                setIsVoiceSupported(false);
-            }
-        };
-
-        setupAudio();
-    }, []);
- 
-    // Web SpeechRecognition setup (for web platform)
-    useEffect(() => {
-        if (Platform.OS !== 'web' || !isVoiceSupported) return;
-
-        if (typeof window === 'undefined') return;
-        const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognitionImpl) {
-            setIsVoiceSupported(false);
-            return;
-        }
-
-        const recognition = new SpeechRecognitionImpl();
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        // Web result handler: push transcript into search + input
-        recognition.onresult = (event: any) => {
-            const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
-            if (transcript.trim()) {
-                search(transcript);
-                syncInputText(transcript);
-            }
-        };
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => setIsListening(false);
-
-        // Store for web platform use
-        if (Platform.OS === 'web') {
-            (recognitionRef as any).current = recognition;
+        if (!supported) {
+            console.warn('Voice recognition not supported on this device');
         }
 
         return () => {
-            recognition.stop?.();
+            voiceRecognizerRef.current?.destroy();
         };
-    }, [search, isVoiceSupported]);
+    }, []);
  
     // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
@@ -144,7 +92,7 @@ export default function SearchScreen() {
         Keyboard.dismiss();
     };
  
-    // Android-only mic permission before starting audio recording
+    // Android-only mic permission before starting voice recognition
     const requestAudioPermission = async () => {
         if (Platform.OS !== 'android') return true;
         const granted = await PermissionsAndroid.request(
@@ -158,57 +106,29 @@ export default function SearchScreen() {
         return granted === PermissionsAndroid.RESULTS.GRANTED;
     };
 
-    // Mic button toggles recording and transcription
+    // Handle mic button press
     const handleVoicePress = async () => {
         if (!isVoiceSupported) {
             Alert.alert(
                 'Voice search unavailable',
-                'OpenAI API is not configured. Please set EXPO_PUBLIC_OPENAI_API_KEY in your environment.'
+                'Voice recognition is not supported on this device.'
             );
             return;
         }
 
-        if (Platform.OS === 'web') {
-            // Web: Use native SpeechRecognition API
-            const rec = (recognitionRef as any).current;
-            if (!rec) {
-                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
-                return;
-            }
-
-            if (isListening) {
-                rec?.stop?.();
-                setIsListening(false);
-                return;
-            }
-
+        if (isListening) {
+            // Stop listening
             try {
-                rec?.start?.();
-                setIsListening(true);
-            } catch {
+                await voiceRecognizerRef.current?.stop();
+                setIsListening(false);
+            } catch (error) {
+                console.error('Error stopping voice:', error);
                 setIsListening(false);
             }
             return;
         }
 
-        // Native: Use Whisper API with audio recording
-        try {
-            if (isListening) {
-                // Stop recording
-                await stopRecording();
-            } else {
-                // Start recording
-                await startRecording();
-            }
-        } catch (error) {
-            console.error('Voice press error:', error);
-            setIsListening(false);
-            Alert.alert('Error', 'Failed to process voice command');
-        }
-    };
-
-    // Start audio recording
-    const startRecording = async () => {
+        // Start listening
         try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
@@ -217,74 +137,19 @@ export default function SearchScreen() {
             }
 
             setIsListening(true);
-            const recording = new Audio.Recording();
-            recordingRef.current = recording;
-
-            await recording.prepareToRecordAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            await recording.startAsync();
-            console.log('Recording started...');
+            
+            // Start listening with callback
+            await voiceRecognizerRef.current?.start((transcript) => {
+                console.log('✅ Voice transcript:', transcript);
+                setManualText(transcript);
+                search(transcript);
+                syncInputText(transcript);
+                setIsListening(false);
+            });
         } catch (error) {
-            console.error('Recording error:', error);
+            console.error('Voice press error:', error);
             setIsListening(false);
-            Alert.alert(
-                'Recording Error',
-                'Failed to start recording. Please try again.'
-            );
-        }
-    };
-
-    // Stop recording and transcribe
-    const stopRecording = async () => {
-        if (!recordingRef.current) return;
-
-        setIsListening(false);
-        setIsTranscribing(true);
-
-        const recording = recordingRef.current;
-        recordingRef.current = null;
-
-        try {
-            await recording.stopAndUnloadAsync();
-            const uri = recording.getURI();
-
-            if (!uri) {
-                Alert.alert('Error', 'Failed to get recording URI');
-                setIsTranscribing(false);
-                return;
-            }
-
-            console.log('Recording stopped, transcribing...');
-
-            // Send to Whisper API for transcription
-            try {
-                const transcript = await transcribeAudio(uri);
-                if (transcript && transcript.trim()) {
-                    // Update both the internal state and the search
-                    setManualText(transcript);
-                    search(transcript);
-                    console.log('✅ Transcribed:', transcript);
-                } else {
-                    Alert.alert('Transcription', 'No speech detected. Please try again.');
-                }
-            } catch (transcribeError) {
-                console.error('Transcription error:', transcribeError);
-                const errorMessage = transcribeError instanceof Error 
-                    ? transcribeError.message 
-                    : 'Failed to transcribe audio. Please check your OpenAI API key and network connection.';
-                Alert.alert('Transcription Error', errorMessage);
-            }
-        } catch (error) {
-            console.error('Stop recording error:', error);
-            Alert.alert(
-                'Error',
-                error instanceof Error
-                    ? error.message
-                    : 'Failed to process recording. Please try again.'
-            );
-        } finally {
-            setIsTranscribing(false);
+            Alert.alert('Error', 'Failed to start voice recognition. Please try again.');
         }
     };
  
@@ -386,25 +251,21 @@ export default function SearchScreen() {
                         onPress={handleVoicePress}
                         style={styles.voiceButton}
                         accessibilityLabel="Voice search"
-                        disabled={isTranscribing}
+                        disabled={false}
                     >
-                        {isTranscribing ? (
-                            <ActivityIndicator size="small" color={COLORS.accent} />
-                        ) : (
-                            <Ionicons
-                                name={
-                                    isVoiceSupported
-                                        ? (isListening ? 'mic' : 'mic-outline')
-                                        : 'mic-off'
-                                }
-                                size={20}
-                                color={
-                                    isVoiceSupported
-                                        ? (isListening ? COLORS.accent : COLORS.textSecondary)
-                                        : COLORS.textMuted
-                                }
-                            />
-                        )}
+                        <Ionicons
+                            name={
+                                isVoiceSupported
+                                    ? (isListening ? 'mic' : 'mic-outline')
+                                    : 'mic-off'
+                            }
+                            size={20}
+                            color={
+                                isVoiceSupported
+                                    ? (isListening ? COLORS.accent : COLORS.textSecondary)
+                                    : COLORS.textMuted
+                            }
+                        />
                     </TouchableOpacity>
                     {query.length > 0 && Platform.OS !== 'ios' && (
                         <TouchableOpacity onPress={handleClear}>

@@ -14,12 +14,18 @@
   "expo": {
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["@react-native-voice/voice", "expo-av", "tsx"]
+        "exclude": [
+          "@react-native-voice/voice",
+          "expo-av",
+          "tsx"
+        ]
       },
       "reportSkipped": false
     },
     "install": {
-      "exclude": ["@expo/config-plugins"]
+      "exclude": [
+        "@expo/config-plugins"
+      ]
     }
   },
   "dependencies": {
