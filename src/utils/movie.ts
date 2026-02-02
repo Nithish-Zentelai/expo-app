@@ -1,4 +1,4 @@
-import type { Movie as TmdbMovie, MovieDetails, Genre } from '../api/tmdb';
+import type { Genre, MovieDetails, Movie as TmdbMovie } from '../api/tmdb';
 import type { Category, Movie as SupabaseMovie } from '../types/database.types';
 
 export type MovieWithSource = TmdbMovie & { source?: 'supabase'; sourceId?: string };

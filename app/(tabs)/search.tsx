@@ -6,7 +6,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -100,7 +100,13 @@ export default function SearchScreen() {
             }
         };
         voiceModule.onSpeechEnd = () => setIsListening(false);
-        voiceModule.onSpeechError = () => setIsListening(false);
+        voiceModule.onSpeechError = (event: { error?: { message?: string; code?: string | number } }) => {
+            setIsListening(false);
+            const message = event?.error?.message?.toLowerCase() ?? '';
+            if (message.includes('not available') || message.includes('not supported')) {
+                setIsVoiceSupported(false);
+            }
+        };
 
         const checkAvailability = async () => {
             try {
@@ -168,7 +174,10 @@ export default function SearchScreen() {
             if (Platform.OS === 'web') {
                 Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
             } else {
-                Alert.alert('Voice search unavailable', 'Speech recognition is not available on this device.');
+                Alert.alert(
+                    'Voice search unavailable',
+                    'Install/enable Speech Services by Google, set it as the default voice input, and allow microphone access.'
+                );
             }
             return;
         }
@@ -205,6 +214,7 @@ export default function SearchScreen() {
             setIsListening(true);
         } catch {
             setIsListening(false);
+            setIsVoiceSupported(false);
         }
     };
 
@@ -214,6 +224,36 @@ export default function SearchScreen() {
         const resultIds = results?.map(r => r.id) || [];
         return homeData.trending.filter(m => !resultIds.includes(m.id)).slice(0, 6);
     }, [homeData.trending, results]);
+
+    // Local fallback matches from home lists (helps when TMDB returns empty).
+    const localMatches = useMemo(() => {
+        const searchText = query.trim().toLowerCase();
+        if (!searchText) return [];
+        const pool = [
+            ...homeData.trending,
+            ...homeData.popular,
+            ...homeData.topRated,
+            ...homeData.upcoming,
+        ];
+        const seen = new Set<number>();
+        return pool.filter((movie) => {
+            if (seen.has(movie.id)) return false;
+            const title = (movie.title || movie.name || movie.original_title || '').toLowerCase();
+            if (!title.includes(searchText)) return false;
+            seen.add(movie.id);
+            return true;
+        });
+    }, [homeData, query]);
+
+    const combinedResults = useMemo(() => {
+        if (!query.trim()) return results || [];
+        const merged = [...(results || [])];
+        const ids = new Set(merged.map((m) => m.id));
+        localMatches.forEach((m) => {
+            if (!ids.has(m.id)) merged.push(m);
+        });
+        return merged;
+    }, [localMatches, query, results]);
 
     const renderItem = useCallback(({ item, index }: { item: Movie, index: number }) => (
         <Animated.View
@@ -278,9 +318,17 @@ export default function SearchScreen() {
                         accessibilityLabel="Voice search"
                     >
                         <Ionicons
-                            name={isListening ? 'mic' : 'mic-outline'}
+                            name={
+                                isVoiceSupported
+                                    ? (isListening ? 'mic' : 'mic-outline')
+                                    : 'mic-off'
+                            }
                             size={20}
-                            color={isListening ? COLORS.accent : COLORS.textSecondary}
+                            color={
+                                isVoiceSupported
+                                    ? (isListening ? COLORS.accent : COLORS.textSecondary)
+                                    : COLORS.textMuted
+                            }
                         />
                     </TouchableOpacity>
                     {query.length > 0 && Platform.OS !== 'ios' && (
@@ -332,7 +380,7 @@ export default function SearchScreen() {
 
             {/* Results Grid */}
             <FlatList
-                data={results || []}
+                data={combinedResults || []}
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id.toString()}
                 numColumns={3}
@@ -343,7 +391,7 @@ export default function SearchScreen() {
                 ListHeaderComponent={
                     query.trim().length > 0 ? (
                         <Text style={styles.resultsTitle}>
-                            {(results && results.length > 0) ? `Results for "${query}"` : null}
+                            {(combinedResults && combinedResults.length > 0) ? `Results for "${query}"` : null}
                         </Text>
                     ) : null
                 }
@@ -361,7 +409,7 @@ export default function SearchScreen() {
                                 </View>
                             ))}
                         </View>
-                    ) : (query.trim().length > 0 && (!results || results.length === 0) ? (
+                    ) : (query.trim().length > 0 && (!combinedResults || combinedResults.length === 0) ? (
                         <View style={styles.emptyContainer}>
                             <Text style={styles.emptyText}>No matches for "{query}"</Text>
                         </View>

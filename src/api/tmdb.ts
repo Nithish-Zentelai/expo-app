@@ -9,20 +9,21 @@ import axios from 'axios';
 // ============ Configuration ============
 
 // Use API key from environment (.env -> EXPO_PUBLIC_TMDB_API_KEY)
+// Optional proxy: EXPO_PUBLIC_TMDB_PROXY_URL (e.g., https://api.example.com)
 const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
-const BASE_URL = 'https://api.themoviedb.org/3';
+const PROXY_URL = (process.env.EXPO_PUBLIC_TMDB_PROXY_URL || '').replace(/\/$/, '');
+const BASE_URL = PROXY_URL ? `${PROXY_URL}/tmdb` : 'https://api.themoviedb.org/3';
 
-if (!API_KEY) {
-    console.warn('[MatrixFlix] Missing EXPO_PUBLIC_TMDB_API_KEY in environment.');
+if (!PROXY_URL && !API_KEY) {
+    console.warn('[MatrixFlix] Missing EXPO_PUBLIC_TMDB_API_KEY and no proxy configured.');
 }
 
 const api = axios.create({
     baseURL: BASE_URL,
-    timeout: 5000, // 5 second timeout
-    params: {
-        api_key: API_KEY,
-        language: 'en-US',
-    }
+    timeout: 8000, // 8 second timeout for slow DNS/handshake scenarios
+    params: PROXY_URL
+        ? { language: 'en-US' }
+        : { api_key: API_KEY, language: 'en-US' },
 });
 
 // ============ Type Definitions ============
