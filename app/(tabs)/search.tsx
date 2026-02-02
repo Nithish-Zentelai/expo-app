@@ -10,6 +10,7 @@ import { Audio } from 'expo-av';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
+    ActivityIndicator,
     Dimensions,
     FlatList,
     Keyboard,
@@ -192,84 +193,98 @@ export default function SearchScreen() {
 
         // Native: Use Whisper API with audio recording
         try {
+            if (isListening) {
+                // Stop recording
+                await stopRecording();
+            } else {
+                // Start recording
+                await startRecording();
+            }
+        } catch (error) {
+            console.error('Voice press error:', error);
+            setIsListening(false);
+            Alert.alert('Error', 'Failed to process voice command');
+        }
+    };
+
+    // Start audio recording
+    const startRecording = async () => {
+        try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
                 Alert.alert('Microphone permission denied', 'Enable microphone access to use voice search.');
                 return;
             }
 
-            if (isListening) {
-                // Stop recording
-                if (recordingRef.current) {
-                    setIsListening(false);
-                    setIsTranscribing(true);
+            setIsListening(true);
+            const recording = new Audio.Recording();
+            recordingRef.current = recording;
 
-                    const recording = recordingRef.current;
-                    recordingRef.current = null;
+            await recording.prepareToRecordAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+            );
+            await recording.startAsync();
+            console.log('Recording started...');
+        } catch (error) {
+            console.error('Recording error:', error);
+            setIsListening(false);
+            Alert.alert(
+                'Recording Error',
+                'Failed to start recording. Please try again.'
+            );
+        }
+    };
 
-                    try {
-                        await recording.stopAndUnloadAsync();
-                        const uri = recording.getURI();
+    // Stop recording and transcribe
+    const stopRecording = async () => {
+        if (!recordingRef.current) return;
 
-                        if (!uri) {
-                            Alert.alert('Error', 'Failed to get recording URI');
-                            setIsTranscribing(false);
-                            return;
-                        }
+        setIsListening(false);
+        setIsTranscribing(true);
 
-                        // Send to Whisper API for transcription
-                        try {
-                            const transcript = await transcribeAudio(uri);
-                            if (transcript && transcript.trim()) {
-                                // Update both the internal state and the search
-                                setManualText(transcript);
-                                search(transcript);
-                                console.log('Transcribed:', transcript);
-                            } else {
-                                Alert.alert('Transcription', 'No speech detected. Please try again.');
-                            }
-                        } catch (transcribeError) {
-                            console.error('Transcription error:', transcribeError);
-                            const errorMessage = transcribeError instanceof Error 
-                                ? transcribeError.message 
-                                : 'Failed to transcribe audio. Please check your OpenAI API key and network connection.';
-                            Alert.alert('Transcription Error', errorMessage);
-                        }
-                    } catch (error) {
-                        console.error('Transcription error:', error);
-                        Alert.alert(
-                            'Transcription Error',
-                            error instanceof Error
-                                ? error.message
-                                : 'Failed to transcribe audio. Please try again.'
-                        );
-                    } finally {
-                        setIsTranscribing(false);
-                    }
+        const recording = recordingRef.current;
+        recordingRef.current = null;
+
+        try {
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+
+            if (!uri) {
+                Alert.alert('Error', 'Failed to get recording URI');
+                setIsTranscribing(false);
+                return;
+            }
+
+            console.log('Recording stopped, transcribing...');
+
+            // Send to Whisper API for transcription
+            try {
+                const transcript = await transcribeAudio(uri);
+                if (transcript && transcript.trim()) {
+                    // Update both the internal state and the search
+                    setManualText(transcript);
+                    search(transcript);
+                    console.log('✅ Transcribed:', transcript);
+                } else {
+                    Alert.alert('Transcription', 'No speech detected. Please try again.');
                 }
-            } else {
-                // Start recording
-                setIsListening(true);
-                try {
-                    const recording = new Audio.Recording();
-                    recordingRef.current = recording;
-
-                    await recording.prepareToRecordAsync(
-                        Audio.RecordingOptionsPresets.HIGH_QUALITY
-                    );
-                    await recording.startAsync();
-                } catch (error) {
-                    console.error('Recording error:', error);
-                    setIsListening(false);
-                    Alert.alert(
-                        'Recording Error',
-                        'Failed to start recording. Please try again.'
-                    );
-                }
+            } catch (transcribeError) {
+                console.error('Transcription error:', transcribeError);
+                const errorMessage = transcribeError instanceof Error 
+                    ? transcribeError.message 
+                    : 'Failed to transcribe audio. Please check your OpenAI API key and network connection.';
+                Alert.alert('Transcription Error', errorMessage);
             }
         } catch (error) {
-            console.error('Voice press error:', error);
-            setIsListening(false);
+            console.error('Stop recording error:', error);
+            Alert.alert(
+                'Error',
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to process recording. Please try again.'
+            );
+        } finally {
+            setIsTranscribing(false);
         }
     };
  
@@ -373,19 +388,23 @@ export default function SearchScreen() {
                         accessibilityLabel="Voice search"
                         disabled={isTranscribing}
                     >
-                        <Ionicons
-                            name={
-                                isVoiceSupported
-                                    ? (isListening ? 'mic' : 'mic-outline')
-                                    : 'mic-off'
-                            }
-                            size={20}
-                            color={
-                                isVoiceSupported
-                                    ? (isListening ? COLORS.accent : COLORS.textSecondary)
-                                    : COLORS.textMuted
-                            }
-                        />
+                        {isTranscribing ? (
+                            <ActivityIndicator size="small" color={COLORS.accent} />
+                        ) : (
+                            <Ionicons
+                                name={
+                                    isVoiceSupported
+                                        ? (isListening ? 'mic' : 'mic-outline')
+                                        : 'mic-off'
+                                }
+                                size={20}
+                                color={
+                                    isVoiceSupported
+                                        ? (isListening ? COLORS.accent : COLORS.textSecondary)
+                                        : COLORS.textMuted
+                                }
+                            />
+                        )}
                     </TouchableOpacity>
                     {query.length > 0 && Platform.OS !== 'ios' && (
                         <TouchableOpacity onPress={handleClear}>
