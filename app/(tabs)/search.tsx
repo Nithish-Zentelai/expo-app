@@ -6,6 +6,7 @@
  
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Audio } from 'expo-av';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
@@ -22,12 +23,13 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
- 
+
 import { Movie } from '../../src/api/tmdb';
 import { MovieCard, MovieCardSkeleton } from '../../src/components';
 import { COLORS, FONT_SIZES, SPACING } from '../../src/constants/theme';
 import { useHomeData, useSearchMovies } from '../../src/hooks/useMovies';
- 
+import { transcribeAudio, isWhisperConfigured } from '../../src/utils/whisper';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function SearchScreen() {
     const {
@@ -39,101 +41,73 @@ export default function SearchScreen() {
  
     const { data: homeData } = useHomeData();
     const inputRef = useRef<TextInput>(null);
-    const recognitionRef = useRef<any>(null);
+    const recordingRef = useRef<Audio.Recording | null>(null);
     const [isListening, setIsListening] = useState(false);
     const [isVoiceSupported, setIsVoiceSupported] = useState(false);
-    const [voiceModule, setVoiceModule] = useState<any>(null);
- 
+    const [isTranscribing, setIsTranscribing] = useState(false);
+
+    // Setup audio recording and permissions on mount
     useEffect(() => {
-        if (Platform.OS === 'web') return;
-        try {
-            // Load voice module for native Android voice recognition
-            const mod = require('@react-native-voice/voice').default;
-            setVoiceModule(mod);
-            console.log('Voice module loaded successfully');
-        } catch (error) {
-            console.warn('Failed to load voice module:', error);
-            setVoiceModule(null);
-        }
-    }, []);
- 
-    // Voice assistant setup (web SpeechRecognition vs native Voice)
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            if (typeof window === 'undefined') return;
-            const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-            if (!SpeechRecognitionImpl) return;
- 
-            const recognition = new SpeechRecognitionImpl();
-            recognition.lang = 'en-US';
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
- 
-            // Web result handler: push transcript into search + input
-            recognition.onresult = (event: any) => {
-                const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
-                if (transcript.trim()) {
-                    search(transcript);
-                    syncInputText(transcript);
-                }
-            };
-            recognition.onend = () => setIsListening(false);
-            recognition.onerror = () => setIsListening(false);
- 
-            recognitionRef.current = recognition;
-            setIsVoiceSupported(true);
- 
-            return () => {
-                recognition.stop?.();
-            };
-        }
- 
-        if (!voiceModule) {
-            setIsVoiceSupported(false);
-            return;
-        }
- 
-        // Native result handler: push transcript into search + input
-        voiceModule.onSpeechResults = (event: { value?: string[] }) => {
-            const transcript = event?.value?.[0] ?? '';
-            console.log('Voice transcript received:', transcript);
-            if (transcript.trim()) {
-                search(transcript);
-                syncInputText(transcript);
-                setIsListening(false);
-            }
-        };
-        voiceModule.onSpeechEnd = () => {
-            console.log('Speech recognition ended');
-            setIsListening(false);
-        };
-        voiceModule.onSpeechError = (error: any) => {
-            console.error('Voice recognition error:', error);
-            setIsListening(false);
-            Alert.alert('Voice Error', `Could not recognize speech: ${error?.error?.message || 'Unknown error'}`);
-        };
- 
-        const checkAvailability = async () => {
+        const setupAudio = async () => {
             try {
-                const available = await voiceModule.isAvailable?.();
-                console.log('Voice module availability check:', available);
-                setIsVoiceSupported(Boolean(available));
+                // Set audio mode for recording
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: true,
+                    playsInSilentModeIOS: true,
+                });
+                
+                // Check if Whisper is configured
+                const configured = isWhisperConfigured();
+                setIsVoiceSupported(configured);
+
+                if (!configured) {
+                    console.warn('Whisper API not configured. Voice search disabled.');
+                }
             } catch (error) {
-                console.warn('Voice availability check failed:', error);
+                console.warn('Failed to setup audio:', error);
                 setIsVoiceSupported(false);
             }
         };
 
-        checkAvailability();
+        setupAudio();
+    }, []);
+ 
+    // Web SpeechRecognition setup (for web platform)
+    useEffect(() => {
+        if (Platform.OS !== 'web' || !isVoiceSupported) return;
 
-        return () => {
-            try {
-                voiceModule.destroy?.().then(() => voiceModule.removeAllListeners?.());
-            } catch (error) {
-                console.warn('Error cleaning up voice module:', error);
+        if (typeof window === 'undefined') return;
+        const SpeechRecognitionImpl = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognitionImpl) {
+            setIsVoiceSupported(false);
+            return;
+        }
+
+        const recognition = new SpeechRecognitionImpl();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        // Web result handler: push transcript into search + input
+        recognition.onresult = (event: any) => {
+            const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
+            if (transcript.trim()) {
+                search(transcript);
+                syncInputText(transcript);
             }
         };
-    }, [search, voiceModule]);
+        recognition.onend = () => setIsListening(false);
+        recognition.onerror = () => setIsListening(false);
+
+        // Store for web platform use
+        if (Platform.OS === 'web') {
+            (recognitionRef as any).current = recognition;
+        }
+
+        return () => {
+            recognition.stop?.();
+        };
+    }, [search, isVoiceSupported]);
  
     // Updates the input text safely (some platforms don't expose setNativeProps)
     const syncInputText = (text: string) => {
@@ -165,7 +139,7 @@ export default function SearchScreen() {
         Keyboard.dismiss();
     };
  
-    // Android-only mic permission before starting native voice recognition
+    // Android-only mic permission before starting audio recording
     const requestAudioPermission = async () => {
         if (Platform.OS !== 'android') return true;
         const granted = await PermissionsAndroid.request(
@@ -178,54 +152,108 @@ export default function SearchScreen() {
         );
         return granted === PermissionsAndroid.RESULTS.GRANTED;
     };
- 
-    // Mic button toggles listening state
+
+    // Mic button toggles recording and transcription
     const handleVoicePress = async () => {
         if (!isVoiceSupported) {
-            if (Platform.OS === 'web') {
-                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
-            } else {
-                Alert.alert(
-                    'Voice search unavailable',
-                    'Install/enable Speech Services by Google, set it as the default voice input, and allow microphone access.'
-                );
-            }
+            Alert.alert(
+                'Voice search unavailable',
+                'OpenAI API is not configured. Please set EXPO_PUBLIC_OPENAI_API_KEY in your environment.'
+            );
             return;
         }
- 
+
         if (Platform.OS === 'web') {
+            // Web: Use native SpeechRecognition API
+            const rec = (recognitionRef as any).current;
+            if (!rec) {
+                Alert.alert('Voice search unavailable', 'Your browser does not support speech recognition.');
+                return;
+            }
+
             if (isListening) {
-                recognitionRef.current?.stop?.();
+                rec?.stop?.();
                 setIsListening(false);
                 return;
             }
+
             try {
-                recognitionRef.current?.start?.();
+                rec?.start?.();
                 setIsListening(true);
             } catch {
                 setIsListening(false);
             }
             return;
         }
- 
+
+        // Native: Use Whisper API with audio recording
         try {
             const hasPermission = await requestAudioPermission();
             if (!hasPermission) {
                 Alert.alert('Microphone permission denied', 'Enable microphone access to use voice search.');
                 return;
             }
- 
+
             if (isListening) {
-                await voiceModule.stop();
-                setIsListening(false);
-                return;
+                // Stop recording
+                if (recordingRef.current) {
+                    setIsListening(false);
+                    setIsTranscribing(true);
+
+                    const recording = recordingRef.current;
+                    recordingRef.current = null;
+
+                    try {
+                        await recording.stopAndUnloadAsync();
+                        const uri = recording.getURI();
+
+                        if (!uri) {
+                            Alert.alert('Error', 'Failed to get recording URI');
+                            setIsTranscribing(false);
+                            return;
+                        }
+
+                        // Send to Whisper API for transcription
+                        const transcript = await transcribeAudio(uri);
+                        if (transcript) {
+                            search(transcript);
+                            syncInputText(transcript);
+                        }
+                    } catch (error) {
+                        console.error('Transcription error:', error);
+                        Alert.alert(
+                            'Transcription Error',
+                            error instanceof Error
+                                ? error.message
+                                : 'Failed to transcribe audio. Please try again.'
+                        );
+                    } finally {
+                        setIsTranscribing(false);
+                    }
+                }
+            } else {
+                // Start recording
+                setIsListening(true);
+                try {
+                    const recording = new Audio.Recording();
+                    recordingRef.current = recording;
+
+                    await recording.prepareToRecordAsync(
+                        Audio.RecordingOptionsPresets.HIGH_QUALITY
+                    );
+                    await recording.startAsync();
+                } catch (error) {
+                    console.error('Recording error:', error);
+                    setIsListening(false);
+                    Alert.alert(
+                        'Recording Error',
+                        'Failed to start recording. Please try again.'
+                    );
+                }
             }
- 
-            await voiceModule.start('en-US');
-            setIsListening(true);
-        } catch {
+        } catch (error) {
+            console.error('Voice press error:', error);
             setIsListening(false);
-            setIsVoiceSupported(false);
         }
     };
  
@@ -327,6 +355,7 @@ export default function SearchScreen() {
                         onPress={handleVoicePress}
                         style={styles.voiceButton}
                         accessibilityLabel="Voice search"
+                        disabled={isTranscribing}
                     >
                         <Ionicons
                             name={
